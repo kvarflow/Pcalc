@@ -135,7 +135,8 @@ class MainActivity : ComponentActivity() {
     /**
      * Pages run in the WebView only if they are the calculator's. Requests go:
      *  - to the APK's assets for the calculator itself;
-     *  - to this device (127.0.0.1 / localhost) for emulator sync;
+     *  - emulator sync (http://127.0.0.1:31125) is answered by the app itself, reading RetroArch;
+     *  - other requests to this device (127.0.0.1 / localhost) go through;
      *  - the calculator's sprites (which it asks GitHub for) come from the APK too;
      *  - nowhere else (analytics and other trackers get an empty answer).
      * Links to other sites open in the browser.
@@ -147,7 +148,7 @@ class MainActivity : ComponentActivity() {
                 ASSET_HOST ->
                     if (url.path.orEmpty().endsWith("/sw.js")) empty(404, "Not Found")
                     else assetLoader.shouldInterceptRequest(url) ?: empty(404, "Not Found")
-                in LOCAL_HOSTS -> null
+                in LOCAL_HOSTS -> if (url.port == SYNC_PORT) syncResponse(request) else null
                 SPRITE_HOST -> bundledSprite(url.path.orEmpty())
                 else -> empty(204, "Blocked")
             }
@@ -233,6 +234,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val retroArch = RetroArchSync()
+
+    /**
+     * Emulator sync without a script: rr-calc polls http://127.0.0.1:31125/state, which on a computer
+     * its mGBA or RetroArch script serves. In the app the request never leaves it; the app reads
+     * RetroArch itself and answers as retroarch_sync.py would, so the calculator needs no change.
+     * Runs on the WebView's network thread, so the UDP reads don't block the page.
+     */
+    private fun syncResponse(request: WebResourceRequest): WebResourceResponse {
+        if (request.method == "OPTIONS") return text(204, "No Content", "")
+        return when (request.url.path) {
+            "/ping" -> text(200, "OK", "radicalred-sync ${RetroArchSync.SCRIPT_VERSION} (retroarch, built into Pcalc)")
+            "/state" -> try {
+                text(200, "OK", retroArch.stateJson(), "application/json")
+            } catch (e: RetroArchSync.RetroArchException) {
+                text(503, "Service Unavailable", e.message.orEmpty())
+            } catch (e: java.io.IOException) {
+                text(503, "Service Unavailable", "Couldn't reach RetroArch: ${e.message}")
+            }
+            else -> text(404, "Not Found", "Not found")
+        }
+    }
+
+    private fun text(status: Int, reason: String, body: String, type: String = "text/plain") =
+        WebResourceResponse(type, "utf-8", status, reason, SYNC_HEADERS, ByteArrayInputStream(body.toByteArray()))
+
     private fun empty(status: Int, reason: String) =
         WebResourceResponse("text/plain", "utf-8", status, reason, emptyMap(), ByteArrayInputStream(ByteArray(0)))
 
@@ -256,6 +283,14 @@ class MainActivity : ComponentActivity() {
         private const val START_URL = "$ASSET_ORIGIN/calc/index.html?app=1"
         private val LOCAL_HOSTS = setOf("127.0.0.1", "localhost")
         private const val SPRITE_HOST = "raw.githubusercontent.com"
+        // rr-calc's emulator sync (js/emulator_sync.js EMULATOR_URL).
+        private const val SYNC_PORT = 31125
+        private val SYNC_HEADERS = mapOf(
+            "Access-Control-Allow-Origin" to "*",
+            "Access-Control-Allow-Methods" to "GET, OPTIONS",
+            "Access-Control-Allow-Headers" to "*",
+            "Cache-Control" to "no-store",
+        )
         // The URLs rr-calc uses (box_controls.js SPRITE_BASE_URL, trainer_controls.js OAK_SPRITE_URL).
         private const val POKEMON_SPRITES = "/May8th1995/sprites/master/"
         private const val OAK_SPRITE = "/smogon/sprites/master/src/_uncategorized/canonical/trainers/gen3/firered-leafgreen/Oak.png"
