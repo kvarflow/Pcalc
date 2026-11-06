@@ -14,9 +14,9 @@ Pcalc is in **beta** (`0.1.0-beta.N`), so its releases are marked *Pre-release*.
 
 1. Set `versionName` in `app/build.gradle.kts` to the new version, and raise `versionCode` by 1.
 2. Merge that change to `main`.
-3. Tag it and push the tag: `git tag v<versionName> && git push origin v<versionName>`.
+3. In [Actions](https://github.com/kvarflow/Pcalc/actions/workflows/build.yml), choose **Run workflow** on `main`, tick **release** and run it. Pushing a `v<versionName>` tag does the same.
 
-The workflow builds the APK and publishes the release. Versions with a suffix, such as `-beta.2`, are marked pre-release.
+The workflow builds the APK, creates the `v<versionName>` tag and publishes the release. Versions with a suffix, such as `-beta.2`, are marked pre-release.
 
 ## What the app adds around the calculator
 
