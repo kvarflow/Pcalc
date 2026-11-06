@@ -54,7 +54,12 @@ class RetroArchSync(
                     val why = if (reply.size > 3) reply.drop(3) else reply
                     throw RetroArchException("RetroArch could not read the game: " + why.joinToString(" "))
                 }
-                for (byte in reply.drop(2).take(size)) out.write(byte.toInt(16))
+                for (byte in reply.drop(2).take(size)) {
+                    // Something answering on RetroArch's port that isn't RetroArch: say so, don't crash.
+                    val value = byte.toIntOrNull(16)?.takeIf { it in 0..255 }
+                        ?: throw RetroArchException("Something other than RetroArch answered on port $port")
+                    out.write(value)
+                }
                 at += size
             }
             return out.toByteArray()

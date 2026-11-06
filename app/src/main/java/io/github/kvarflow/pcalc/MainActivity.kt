@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -21,11 +23,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.util.concurrent.Executors
 
 /**
  * Shows the calculator, which is packed in the APK's assets, full screen.
@@ -45,6 +50,30 @@ class MainActivity : ComponentActivity() {
 
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var pendingSave: ByteArray? = null
+
+    private val backups by lazy { BackupStore(this) }
+    // Backup file work happens here, off the main thread; replies go back on the main thread.
+    private val io = Executors.newSingleThreadExecutor()
+    private val main = Handler(Looper.getMainLooper())
+    private var folderReply: JavaScriptReplyProxy? = null
+    private var lastAutoBackup: String? = null
+
+    private val chooseFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val reply = folderReply
+        folderReply = null
+        val error = if (uri == null) null else runCatching { backups.chooseFolder(uri) }.exceptionOrNull()?.let {
+            "Couldn't use that folder: " + (it.message ?: it.javaClass.simpleName)
+        }
+        reply?.let { replyStatus(it, error) }
+    }
+
+    // While the calculator is open, an automatic backup every so often (it is also backed up on leaving).
+    private val periodicBackup = object : Runnable {
+        override fun run() {
+            autoBackup()
+            main.postDelayed(this, AUTO_BACKUP_EVERY_MS)
+        }
+    }
 
     private val openFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         fileCallback?.onReceiveValue(uri?.let { arrayOf(it) })
@@ -112,16 +141,41 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
+        main.removeCallbacks(periodicBackup)
+        main.postDelayed(periodicBackup, AUTO_BACKUP_EVERY_MS)
     }
 
     override fun onPause() {
+        main.removeCallbacks(periodicBackup)
         webView.onPause()
         super.onPause()
     }
 
+    override fun onStop() {
+        // Leaving the app: back up what the calculator holds now.
+        autoBackup()
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        main.removeCallbacks(periodicBackup)
         webView.destroy()
+        io.shutdown()
         super.onDestroy()
+    }
+
+    /** An automatic backup of everything the calculator keeps, unless nothing changed since the last. */
+    private fun autoBackup() {
+        webView.evaluateJavascript("window.pcalcBackupData ? window.pcalcBackupData() : null") { result ->
+            // evaluateJavascript gives the value as JSON: a quoted string, or null.
+            val text = runCatching { JSONArray("[$result]").optString(0, "") }.getOrDefault("")
+            if (text.isEmpty() || text == "null") return@evaluateJavascript
+            // The backup's own time changes every call: compare the data only.
+            val data = runCatching { JSONObject(text).optJSONObject("data")?.toString() }.getOrNull()
+            if (data == null || data == lastAutoBackup) return@evaluateJavascript
+            lastAutoBackup = data
+            io.execute { runCatching { backups.write(text, "auto") } }
+        }
     }
 
     private fun goFullScreen() {
@@ -136,7 +190,7 @@ class MainActivity : ComponentActivity() {
      * Pages run in the WebView only if they are the calculator's. Requests go:
      *  - to the APK's assets for the calculator itself;
      *  - emulator sync (http://127.0.0.1:31125) is answered by the app itself, reading RetroArch;
-     *  - other requests to this device (127.0.0.1 / localhost) go through;
+     *  - other requests to this device (127.0.0.1 / localhost) are blocked;
      *  - the images it loads from GitHub (sprites, trainers, items) come from the APK too;
      *  - nowhere else (analytics and other trackers get an empty answer).
      * Links to other sites open in the browser.
@@ -148,7 +202,8 @@ class MainActivity : ComponentActivity() {
                 ASSET_HOST ->
                     if (url.path.orEmpty().endsWith("/sw.js")) empty(404, "Not Found")
                     else assetLoader.shouldInterceptRequest(url) ?: empty(404, "Not Found")
-                in LOCAL_HOSTS -> if (url.port == SYNC_PORT) syncResponse(request) else null
+                // Only emulator sync on this device; nothing else here is the calculator's business.
+                in LOCAL_HOSTS -> if (url.port == SYNC_PORT) syncResponse(request) else empty(204, "Blocked")
                 in IMAGE_HOSTS -> bundledRemote(url.host!!, url.path.orEmpty())
                 else -> empty(204, "Blocked")
             }
@@ -157,6 +212,8 @@ class MainActivity : ComponentActivity() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
             if (url.host == ASSET_HOST) return false
+            // Only web and email links leave the app (to the browser / mail app); anything else is ignored.
+            if (url.scheme?.lowercase() !in EXTERNAL_SCHEMES) return true
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (e: ActivityNotFoundException) {
@@ -200,19 +257,77 @@ class MainActivity : ComponentActivity() {
      */
     private fun installDownloadBridge() {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
-        WebViewCompat.addWebMessageListener(webView, BRIDGE_NAME, setOf(ASSET_ORIGIN)) { _, message, _, isMainFrame, _ ->
+        WebViewCompat.addWebMessageListener(webView, BRIDGE_NAME, setOf(ASSET_ORIGIN)) { _, message, _, isMainFrame, reply ->
             if (!isMainFrame) return@addWebMessageListener
+            val raw = message.data ?: return@addWebMessageListener
+            if (raw.length > MAX_MESSAGE) return@addWebMessageListener
             try {
-                val json = JSONObject(message.data ?: return@addWebMessageListener)
-                if (json.optString("type") != "save") return@addWebMessageListener
-                pendingSave = Base64.decode(json.getString("data"), Base64.DEFAULT)
-                saveFile.launch(json.optString("name", "download") to json.optString("mime", "application/octet-stream"))
+                val json = JSONObject(raw)
+                when (json.optString("type")) {
+                    "save" -> {
+                        pendingSave = Base64.decode(json.getString("data"), Base64.DEFAULT)
+                        saveFile.launch(json.optString("name", "download") to json.optString("mime", "application/octet-stream"))
+                    }
+                    "backup:list" -> replyStatus(reply, null)
+                    "backup:chooseFolder" -> {
+                        folderReply = reply
+                        chooseFolder.launch(null)
+                    }
+                    "backup:save" -> {
+                        val reason = json.optString("reason")
+                        val text = json.optString("data")
+                        io.execute {
+                            val result = runCatching { backups.write(text, reason) }
+                            main.post {
+                                reply.postMessage(JSONObject().apply {
+                                    put("type", "backup:saved")
+                                    result.onSuccess { put("name", it) }
+                                    result.onFailure { put("error", it.message ?: it.javaClass.simpleName) }
+                                }.toString())
+                            }
+                        }
+                    }
+                    "backup:read" -> {
+                        val name = json.optString("name")
+                        io.execute {
+                            val result = runCatching { backups.read(name) }
+                            main.post {
+                                reply.postMessage(JSONObject().apply {
+                                    put("type", "backup:file")
+                                    put("name", name)
+                                    result.onSuccess { put("data", it) }
+                                    result.onFailure { put("error", it.message ?: it.javaClass.simpleName) }
+                                }.toString())
+                            }
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 toast(getString(R.string.save_failed, e.message ?: e.javaClass.simpleName))
             }
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(webView, DOWNLOAD_SHIM, setOf(ASSET_ORIGIN))
+        }
+    }
+
+    /** Where backups go, when the last was, and the backups there (newest first), for the page. */
+    private fun replyStatus(reply: JavaScriptReplyProxy, error: String?) {
+        io.execute {
+            val files = runCatching { backups.list() }.getOrDefault(emptyList())
+            val folder = runCatching { backups.folderName() }.getOrNull()
+            val last = backups.lastBackup()
+            main.post {
+                reply.postMessage(JSONObject().apply {
+                    put("type", "backup:status")
+                    folder?.let { put("folder", it) }
+                    if (last > 0) put("last", last)
+                    error?.let { put("error", it) }
+                    put("files", JSONArray().apply {
+                        files.forEach { put(JSONObject().put("name", it.name).put("modified", it.modified)) }
+                    })
+                }.toString())
+            }
         }
     }
 
@@ -257,8 +372,10 @@ class MainActivity : ComponentActivity() {
                 text(200, "OK", retroArch.stateJson(), "application/json")
             } catch (e: RetroArchSync.RetroArchException) {
                 text(503, "Service Unavailable", e.message.orEmpty())
-            } catch (e: java.io.IOException) {
-                text(503, "Service Unavailable", "Couldn't reach RetroArch: ${e.message}")
+            } catch (e: Exception) {
+                // Anything else (a reply that isn't RetroArch's, a socket error) is reported, never thrown:
+                // an exception here would close the app.
+                text(503, "Service Unavailable", "Couldn't read RetroArch: ${e.message ?: e.javaClass.simpleName}")
             }
             else -> text(404, "Not Found", "Not found")
         }
@@ -302,6 +419,10 @@ class MainActivity : ComponentActivity() {
         private const val POKEMON_SPRITES = "/May8th1995/sprites/master/"
         private const val OAK_SPRITE = "/trainers/gen3/firered-leafgreen/Oak.png"
         private const val BRIDGE_NAME = "PcalcNative"
+        private val EXTERNAL_SCHEMES = setOf("http", "https", "mailto")
+        // A message from the page bigger than this (a backup or a saved file) is ignored.
+        private const val MAX_MESSAGE = 30 * 1024 * 1024
+        private const val AUTO_BACKUP_EVERY_MS = 10 * 60 * 1000L
 
         private val DOWNLOAD_SHIM = """
             (function () {
