@@ -16,6 +16,10 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    env:
+      # The sprite set has non-ASCII file names (Flabébé); Java needs a UTF-8 locale to read them.
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
     steps:
       - uses: actions/checkout@v4
         with:

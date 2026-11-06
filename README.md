@@ -24,7 +24,7 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
 * **Requests are limited:**
   * The calculator's own files come from the APK.
   * `127.0.0.1`/`localhost` is allowed, for emulator sync.
-  * `raw.githubusercontent.com` is allowed for Pokémon sprites, until they're bundled.
+  * Pokémon sprites, which the calculator asks GitHub for, are answered from the APK. They come from the [May8th1995/sprites](https://github.com/May8th1995/sprites) submodule (`sprites/`, about 1 MB), plus Professor Oak from [smogon/sprites](https://github.com/smogon/sprites).
   * Everything else gets an empty answer, which includes analytics. Links to other sites open in the browser.
 * **Files:** *Import .sav* opens Android's file picker. Files the calculator saves, such as the frag sheet CSV, ask where to save.
 * **Thor-friendly:**
@@ -36,7 +36,7 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
 ## Build
 
 ```sh
-git clone --recurse-submodules https://github.com/kvarflow/Pcalc && cd Pcalc
+git clone --recurse-submodules https://github.com/kvarflow/Pcalc && cd Pcalc   # rr-calc + sprites
 
 # 1. The calculator (Node 18+)
 cd rr-calc
@@ -69,3 +69,5 @@ It isn't a secret, so anyone could sign an APK that installs over Pcalc. Only in
 ## Licence
 
 MIT (see `LICENSE`). rr-calc is MIT too, a fork of [smogon/damage-calc](https://github.com/smogon/damage-calc).
+
+The Pokémon sprites are Nintendo / Game Freak artwork, collected by the projects above. The sprite repository has no licence of its own; it's the set rr-calc already shows.
