@@ -1,6 +1,3 @@
-import java.security.MessageDigest
-import java.net.URI
-import java.net.URL
 import org.gradle.api.file.FileSystemOperations
 import javax.inject.Inject
 
@@ -67,8 +64,8 @@ android {
 
     androidResources {
         noCompress += listOf("png", "jpg", "webp")
-        // The default also skips folders starting with "_", which would drop every trainer picture
-        // (smogon/sprites keeps them under _uncategorized/). Skip only version-control clutter.
+        // Pack every file the calculator has (the default skips folders starting with "_");
+        // skip only version-control clutter.
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 }
@@ -127,148 +124,8 @@ val copyCalc = tasks.register<CopyCalc>("copyCalc") {
     dist.set(calcDist)
 }
 
-/**
- * Copies the Pokémon sprites (the May8th1995/sprites submodule, the set rr-calc shows) into the
- * APK's assets under sprites/, so the app can answer the calculator's sprite requests offline.
- */
-abstract class CopySprites : DefaultTask() {
-    @get:InputDirectory
-    abstract val sprites: DirectoryProperty
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @get:Inject
-    abstract val fs: FileSystemOperations
-
-    @TaskAction
-    fun copy() {
-        val root = sprites.get().asFile
-        check(root.listFiles { f -> f.name.endsWith(".png") }.orEmpty().isNotEmpty()) {
-            "No sprites in $root. Fetch the submodule:  git submodule update --init sprites"
-        }
-        fs.sync {
-            from(root) { include("*.png") }
-            into(outputDir.dir("sprites"))
-        }
-    }
-}
-
-/**
- * Packs the images the calculator loads from elsewhere by a fixed address (trainer pictures, item
- * icons, Professor Oak), which rr-calc's build lists in dist/offline-assets.json, under
- * remote/<host>/<path>, where the app answers those addresses from (MainActivity.bundledRemote).
- * Each is downloaded once into build/remote-cache and kept; the addresses pin a commit, so a cached
- * file never goes stale. A calculator built before offline-assets.json existed has nothing to pack.
- */
-abstract class PackRemoteAssets : DefaultTask() {
-    @get:InputFiles
-    @get:Optional
-    abstract val list: RegularFileProperty
-
-    /** sha256 and path of every image allowed in (app/remote-assets.lock). */
-    @get:InputFiles
-    @get:Optional
-    abstract val lock: RegularFileProperty
-
-    /** -PupdateRemoteAssetsLock: record the images as they are now instead of checking them. */
-    @get:Input
-    abstract val updateLock: Property<Boolean>
-
-    @get:Internal
-    abstract val cacheDir: DirectoryProperty
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @get:Inject
-    abstract val fs: FileSystemOperations
-
-    @TaskAction
-    fun pack() {
-        val listFile = list.orNull?.asFile
-        val urls = if (listFile != null && listFile.isFile) {
-            Regex("\"(https://[^\"]+)\"").findAll(listFile.readText()).map { it.groupValues[1] }.toList()
-        } else {
-            emptyList()
-        }
-        val cache = cacheDir.get().asFile
-        val hashes = sortedMapOf<String, String>()
-        for (url in urls) {
-            val uri = URI(url)
-            // Only images from the hosts the app answers for, and nothing that climbs out of the cache.
-            check(uri.scheme == "https" && uri.host in ALLOWED_HOSTS && !uri.path.contains("..")) { "Not packing $url" }
-            val path = uri.host + uri.path
-            val target = cache.resolve(path)
-            if (!(target.isFile && target.length() > 0)) {
-                target.parentFile.mkdirs()
-                val partial = File(target.path + ".part")
-                URL(url).openStream().use { input -> partial.outputStream().use { input.copyTo(it) } }
-                check(partial.renameTo(target)) { "Couldn't save $target" }
-            }
-            val bytes = target.readBytes()
-            check(bytes.size in 8..MAX_IMAGE && bytes.copyOf(8).contentEquals(PNG)) { "$url isn't a PNG image" }
-            hashes[path] = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        }
-        checkLock(hashes)
-        fs.sync {
-            from(cache) { include { it.isDirectory || it.relativePath.pathString in hashes.keys } }
-            into(outputDir.dir("remote"))
-            includeEmptyDirs = false
-        }
-        logger.lifecycle("Packed ${hashes.size} images the calculator loads from elsewhere")
-    }
-
-    /**
-     * Every packed image must be in the lock with the same sha256: an image that changed upstream, or
-     * a new one, stops the build until the lock is updated on purpose (-PupdateRemoteAssetsLock) and
-     * the change reviewed in the commit.
-     */
-    private fun checkLock(hashes: Map<String, String>) {
-        val lockFile = lock.get().asFile
-        if (updateLock.get()) {
-            lockFile.writeText("# sha256 and path of every image packRemoteAssets may pack. Regenerate with:\n" +
-                "#   ./gradlew packRemoteAssets -PupdateRemoteAssetsLock\n" +
-                hashes.entries.joinToString("") { "${it.value}  ${it.key}\n" })
-            logger.lifecycle("Wrote ${hashes.size} images to $lockFile")
-            return
-        }
-        if (hashes.isEmpty()) return
-        val locked = if (lockFile.isFile) {
-            lockFile.readLines().filter { it.isNotBlank() && !it.startsWith("#") }
-                .associate { line -> line.substringAfter("  ") to line.substringBefore("  ") }
-        } else {
-            emptyMap()
-        }
-        val problems = hashes.filter { (path, hash) -> locked[path] != hash }.keys
-        check(problems.isEmpty()) {
-            "${problems.size} image(s) aren't in app/remote-assets.lock or have changed, e.g. ${problems.first()}. " +
-                "If the change is expected, run: ./gradlew packRemoteAssets -PupdateRemoteAssetsLock"
-        }
-    }
-
-    companion object {
-        private val ALLOWED_HOSTS = setOf("raw.githubusercontent.com")
-        private val PNG = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
-        private const val MAX_IMAGE = 1024 * 1024
-    }
-}
-
-val packRemoteAssets = tasks.register<PackRemoteAssets>("packRemoteAssets") {
-    list.set(calcDist.map { it.file("offline-assets.json") })
-    lock.set(layout.projectDirectory.file("remote-assets.lock"))
-    updateLock.set(providers.gradleProperty("updateRemoteAssetsLock").isPresent)
-    cacheDir.set(layout.buildDirectory.dir("remote-cache"))
-}
-
-val copySprites = tasks.register<CopySprites>("copySprites") {
-    sprites.set(rootProject.layout.projectDirectory.dir("sprites"))
-}
-
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(copyCalc, CopyCalc::outputDir)
-        variant.sources.assets?.addGeneratedSourceDirectory(copySprites, CopySprites::outputDir)
-        variant.sources.assets?.addGeneratedSourceDirectory(packRemoteAssets, PackRemoteAssets::outputDir)
     }
 }

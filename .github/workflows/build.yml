@@ -9,6 +9,10 @@ on:
         description: "Publish a release for the versionName in app/build.gradle.kts (run on main)"
         type: boolean
         default: false
+      replace:
+        description: "Replace an existing pre-release of that version (betas only)"
+        type: boolean
+        default: false
 
 # Read-only unless a job asks for more (only the release job does).
 permissions:
@@ -18,7 +22,7 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     env:
-      # The sprite set has non-ASCII file names (Flabébé); Java needs a UTF-8 locale to read them.
+      # The calculator's sprites have non-ASCII file names (Flabébé); Java needs a UTF-8 locale to read them.
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     steps:
@@ -53,7 +57,6 @@ jobs:
           # Checks gradle/wrapper/gradle-wrapper.jar is an official Gradle release before running it.
           validate-wrappers: true
       - name: Test and build APK
-        # packRemoteAssets checks every downloaded image against app/remote-assets.lock.
         run: ./gradlew --no-daemon testReleaseUnitTest assembleRelease
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -147,7 +150,13 @@ jobs:
             where="--verify-tag"
           else
             if gh release view "$tag" >/dev/null 2>&1; then
-              echo "::error::Release $tag already exists: raise versionName first"; exit 1
+              # Only a pre-release (-beta.N) may be replaced, and only when asked to.
+              case "$version" in *-*) prerelease=1;; *) prerelease=0;; esac
+              if [ "${{ inputs.replace }}" = true ] && [ "$prerelease" = 1 ]; then
+                gh release delete "$tag" --cleanup-tag --yes
+              else
+                echo "::error::Release $tag already exists: raise versionName first (a pre-release can be replaced with \"replace\")"; exit 1
+              fi
             fi
             where="--target ${GITHUB_SHA}"
           fi

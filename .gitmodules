@@ -1,6 +1,3 @@
 [submodule "rr-calc"]
 	path = rr-calc
 	url = https://github.com/kvarflow/rr-calc.git
-[submodule "sprites"]
-	path = sprites
-	url = https://github.com/May8th1995/sprites.git

@@ -4,7 +4,7 @@ A Pokémon damage calculator app for Android, made for the AYN Thor's second scr
 
 What you get:
 * **The calculator**, with the Thor's small-screen layout, as on the website. More games are on the way: each one you pick has its own box, runs and settings.
-* **Pictures:** all Pokémon sprites, trainer pictures and item icons are bundled, so they work offline too.
+* **Pictures:** all Pokémon sprites, trainer pictures and item icons come with the calculator itself, so they work offline too.
 * **Emulator sync built in:** the calculator follows the battle in RetroArch on the other screen.
 * **Backups:** your boxes, runs and settings are backed up to a folder on the device automatically.
 
@@ -22,7 +22,7 @@ Pcalc is in **beta** (`0.1.0-beta.N`), so its releases are marked *Pre-release*.
 2. Merge that change to `main`.
 3. In [Actions](https://github.com/kvarflow/Pcalc/actions/workflows/build.yml), choose **Run workflow** on `main`, tick **release** and run it. Pushing a `v<versionName>` tag does the same.
 
-The workflow builds the APK, creates the `v<versionName>` tag and publishes the release. Versions with a suffix, such as `-beta.2`, are marked pre-release.
+The workflow builds the APK, creates the `v<versionName>` tag and publishes the release. Versions with a suffix, such as `-beta.2`, are marked pre-release. To rebuild a beta under the same version, tick **replace** as well: the old pre-release and its tag are deleted first. A full release can't be replaced.
 
 ## What the app adds around the calculator
 
@@ -30,8 +30,7 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
 * **Requests are limited:**
   * The calculator's own files come from the APK.
   * Emulator sync (`http://127.0.0.1:31125`) is answered by the app itself (see below). Other requests to `127.0.0.1`/`localhost` are blocked.
-  * Pokémon sprites, which the calculator asks GitHub for, are answered from the APK. They come from the [May8th1995/sprites](https://github.com/May8th1995/sprites) submodule (`sprites/`, about 1 MB), plus Professor Oak from [smogon/sprites](https://github.com/smogon/sprites).
-  * Other images the calculator loads by a fixed address (trainer pictures, item icons, Oak) are answered from the APK too. rr-calc's build lists them in `offline-assets.json`, and `packRemoteAssets` downloads each one once, into `app/build/remote-cache`, and packs it under `assets/remote/<host>/<path>`.
+  * The calculator's images (Pokémon sprites, trainer pictures, item icons) are its own files, kept in rr-calc's `src/img/`, so they're in the APK with the rest of it. Nothing is fetched from other sites, at build time or when you use the app.
   * Everything else gets an empty answer, which includes analytics. Web and email links open in the browser or mail app; links of any other kind are ignored.
 * **Files:** *Import .sav* opens Android's file picker. Files the calculator saves, such as the frag sheet CSV or a backup, ask where to save.
 * **Thor-friendly:**
@@ -70,7 +69,7 @@ How it works: the calculator asks `http://127.0.0.1:31125/state` once a second. 
 ## Build
 
 ```sh
-git clone --recurse-submodules https://github.com/kvarflow/Pcalc && cd Pcalc   # rr-calc + sprites
+git clone --recurse-submodules https://github.com/kvarflow/Pcalc && cd Pcalc   # with rr-calc
 
 # 1. The calculator (Node 18+)
 cd rr-calc
@@ -130,11 +129,11 @@ Until the release key is in the secrets, releases keep the sideload signature an
   * The actions are pinned to exact commits.
   * The Gradle wrapper is validated.
   * npm packages install from lockfiles with their scripts off.
-  * Every downloaded image must be a PNG matching its sha256 in `app/remote-assets.lock`. After an intended change, run `./gradlew packRemoteAssets -PupdateRemoteAssetsLock` and commit the lock.
+  * The build downloads nothing but the toolchain and packages: the calculator, its images included, comes from the pinned rr-calc commit.
 * **Releases:** the release job is the only one with write access or the signing key. It checks the signature before publishing, and publishes the APK's sha256 alongside it.
 
 ## Licence
 
 MIT (see `LICENSE`). rr-calc is MIT too, a fork of [smogon/damage-calc](https://github.com/smogon/damage-calc).
 
-The Pokémon sprites are Nintendo / Game Freak artwork, collected by the projects above. The sprite repository has no licence of its own; it's the set rr-calc already shows.
+The Pokémon sprites, trainer pictures and item icons are Nintendo / Game Freak / The Pokémon Company artwork; rr-calc's README says where each set comes from.
