@@ -3,12 +3,12 @@
 A Pokémon damage calculator app for Android, made for the AYN Thor's second screen. It runs entirely offline, from inside the APK.
 
 What you get:
-* **The Radical Red calculator**, with the Thor's small-screen layout, as on the website.
+* **The calculator**, with the Thor's small-screen layout, as on the website. More games are on the way: each one you pick has its own box, runs and settings.
 * **Pictures:** all Pokémon sprites, trainer pictures and item icons are bundled, so they work offline too.
 * **Emulator sync built in:** the calculator follows the battle in RetroArch on the other screen.
 * **Backups:** your boxes, runs and settings are backed up to a folder on the device automatically.
 
-The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc is the app around it: it pins an rr-calc commit as a git submodule (`rr-calc/`), builds it and packs the result into the APK.
+The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc is the app around it, game-neutral by design: it pins an rr-calc commit as a git submodule (`rr-calc/`), builds it and packs the result into the APK.
 
 ## Install
 
@@ -55,9 +55,9 @@ After reinstalling, choose the same folder again, then restore its newest backup
 
 ## Emulator sync with RetroArch, built in
 
-The calculator can follow a battle in Radical Red as you play. It opens the trainer, loads the Pokémon each side has out, and sets their HP, stat changes and status as the game has them. On a computer this needs rr-calc's sync script running beside the emulator. In Pcalc it's built in, so there's nothing else to install.
+The calculator can follow a battle as you play, in games whose calculator supports it. It opens the trainer, loads the Pokémon each side has out, and sets their HP, stat changes and status as the game has them. On a computer this needs rr-calc's sync script running beside the emulator. In Pcalc it's built in, so there's nothing else to install.
 
-1. In RetroArch, play Radical Red with the **mGBA** core.
+1. In RetroArch, play the game with the **mGBA** core.
 2. Turn on **Settings › Network › Network Commands**, port 55355, and save the configuration.
 3. In Pcalc, import your `.sav` (so your Pokémon are in your box), then turn on **Emulator sync**, next to *Import .sav*.
 
