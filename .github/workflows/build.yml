@@ -48,14 +48,21 @@ jobs:
           name: Pcalc-apk
           path: ${{ env.APK }}
 
-      # Every push to main replaces the "latest" release, so the newest APK is always one tap
-      # away on the Thor: github.com/kvarflow/Pcalc/releases/latest
-      - name: Publish the "latest" release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # A version tag (v0.1.0-beta.1, v0.2.0, ...) publishes a release with the APK. Tags with a
+      # suffix (-beta.N) are marked pre-release. The tag must match versionName in app/build.gradle.kts.
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --cleanup-tag --yes || true
-          gh release create latest "$APK" --latest --target "$GITHUB_SHA" \
-            --title "Latest build (${GITHUB_SHA::7})" \
-            --notes "Built from ${GITHUB_SHA::7} with rr-calc $(git -C rr-calc rev-parse --short HEAD). Install Pcalc-*.apk on the Thor."
+          tag="${GITHUB_REF_NAME}"
+          version=$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+          if [ "$tag" != "v$version" ]; then
+            echo "::error::Tag $tag doesn't match versionName $version"; exit 1
+          fi
+          cp "$APK" "Pcalc-${version}.apk"
+          flags=""
+          case "$version" in *-*) flags="--prerelease";; esac
+          gh release create "$tag" "Pcalc-${version}.apk" $flags --verify-tag \
+            --title "Pcalc ${version}" \
+            --notes "Pcalc ${version}, with rr-calc $(git -C rr-calc rev-parse --short HEAD). Download Pcalc-${version}.apk on the device and open it to install."

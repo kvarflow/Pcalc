@@ -6,7 +6,17 @@ The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc i
 
 ## Install
 
-Download `Pcalc-*.apk` from [the latest release](https://github.com/kvarflow/Pcalc/releases/latest) on the Thor and open it. You'll need to allow installs from your browser or file manager. Every push to `main` builds a new one.
+On the Thor, open [Releases](https://github.com/kvarflow/Pcalc/releases), download `Pcalc-<version>.apk` from the newest release and open it. You'll need to allow installs from your browser or file manager.
+
+Pcalc is in **beta** (`0.1.0-beta.N`), so its releases are marked *Pre-release*. Every push also builds an APK, which you can find under the run's *Artifacts* in [Actions](https://github.com/kvarflow/Pcalc/actions).
+
+### Making a release
+
+1. Set `versionName` in `app/build.gradle.kts` to the new version, and raise `versionCode` by 1.
+2. Merge that change to `main`.
+3. Tag it and push the tag: `git tag v<versionName> && git push origin v<versionName>`.
+
+The workflow builds the APK and publishes the release. Versions with a suffix, such as `-beta.2`, are marked pre-release.
 
 ## What the app adds around the calculator
 
