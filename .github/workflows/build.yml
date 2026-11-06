@@ -22,7 +22,7 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     env:
-      # The sprite set has non-ASCII file names (Flabébé); Java needs a UTF-8 locale to read them.
+      # The calculator's sprites have non-ASCII file names (Flabébé); Java needs a UTF-8 locale to read them.
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     steps:
@@ -57,7 +57,6 @@ jobs:
           # Checks gradle/wrapper/gradle-wrapper.jar is an official Gradle release before running it.
           validate-wrappers: true
       - name: Test and build APK
-        # packRemoteAssets checks every downloaded image against app/remote-assets.lock.
         run: ./gradlew --no-daemon testReleaseUnitTest assembleRelease
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

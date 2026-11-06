@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
      *  - to the APK's assets for the calculator itself;
      *  - emulator sync (http://127.0.0.1:31125) is answered by the app itself, reading RetroArch;
      *  - other requests to this device (127.0.0.1 / localhost) are blocked;
-     *  - the images it loads from elsewhere (sprites, trainer pictures, item icons) come from the APK too;
+     *  - (its images are its own files, in the APK with the rest of it);
      *  - nowhere else (analytics and other trackers get an empty answer).
      * Links to other sites open in the browser.
      */
@@ -204,7 +204,6 @@ class MainActivity : ComponentActivity() {
                     else assetLoader.shouldInterceptRequest(url) ?: empty(404, "Not Found")
                 // Only emulator sync on this device; nothing else here is the calculator's business.
                 in LOCAL_HOSTS -> if (url.port == SYNC_PORT) syncResponse(request) else empty(204, "Blocked")
-                in IMAGE_HOSTS -> bundledRemote(url.host!!, url.path.orEmpty())
                 else -> empty(204, "Blocked")
             }
         }
@@ -331,31 +330,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Images the calculator loads from elsewhere, answered from the APK so they work offline:
-     *  - those rr-calc lists in offline-assets.json (trainer pictures, item icons, Oak), packed under
-     *    remote/<host>/<path> (packRemoteAssets in app/build.gradle.kts);
-     *  - Pokémon sprites, whose addresses follow a pattern, from the whole set under sprites/
-     *    (copySprites);
-     *  - Professor Oak from sprites/trainers/, for calculators from before offline-assets.json.
-     * Anything else gets 404, and the calculator falls back as it does online when an image is missing.
-     */
-    private fun bundledRemote(host: String, path: String): WebResourceResponse {
-        val candidates = buildList {
-            add("remote/$host$path")
-            if (path.startsWith(POKEMON_SPRITES)) add("sprites/" + path.removePrefix(POKEMON_SPRITES))
-            if (path.endsWith(OAK_SPRITE)) add("sprites/trainers/Oak.png")
-        }
-        for (asset in candidates) {
-            try {
-                return WebResourceResponse("image/png", null, assets.open(asset))
-            } catch (e: java.io.IOException) {
-                // not packed: try the next
-            }
-        }
-        return empty(404, "Not Found")
-    }
-
     private val retroArch = RetroArchSync()
 
     /**
@@ -406,9 +380,6 @@ class MainActivity : ComponentActivity() {
         private const val ASSET_ORIGIN = "https://$ASSET_HOST"
         private const val START_URL = "$ASSET_ORIGIN/calc/index.html?app=1"
         private val LOCAL_HOSTS = setOf("127.0.0.1", "localhost")
-        // Where the calculator loads its images from: Pokémon sprites, item icons and Oak from GitHub,
-        // trainer pictures from Pokémon Showdown. All are answered from the APK.
-        private val IMAGE_HOSTS = setOf("raw.githubusercontent.com", "play.pokemonshowdown.com")
         // rr-calc's emulator sync (js/emulator_sync.js EMULATOR_URL).
         private const val SYNC_PORT = 31125
         private val SYNC_HEADERS = mapOf(
@@ -417,9 +388,6 @@ class MainActivity : ComponentActivity() {
             "Access-Control-Allow-Headers" to "*",
             "Cache-Control" to "no-store",
         )
-        // The URLs rr-calc uses (box_controls.js SPRITE_BASE_URL, trainer_controls.js OAK_SPRITE_URL).
-        private const val POKEMON_SPRITES = "/May8th1995/sprites/master/"
-        private const val OAK_SPRITE = "/trainers/gen3/firered-leafgreen/Oak.png"
         private const val BRIDGE_NAME = "PcalcNative"
         private val EXTERNAL_SCHEMES = setOf("http", "https", "mailto")
         // A message from the page bigger than this (a backup or a saved file) is ignored.
