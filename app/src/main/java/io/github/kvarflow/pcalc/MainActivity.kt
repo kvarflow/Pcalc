@@ -56,6 +56,27 @@ class MainActivity : ComponentActivity() {
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private var folderReply: JavaScriptReplyProxy? = null
+
+    // The game's save file the calculator imports by itself (rr-calc's auto-import).
+    private val saveWatcher by lazy { SaveWatcher(this) }
+    // The page's channel, from its last "save:hello", for sending it the save when it changes.
+    private var saveReply: JavaScriptReplyProxy? = null
+
+    private val chooseSave = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val error = if (uri == null) null else runCatching { saveWatcher.choose(uri) }.exceptionOrNull()?.let {
+            "Couldn't use that file: " + (it.message ?: it.javaClass.simpleName)
+        }
+        sendSaveStatus(error)
+        checkSave()
+    }
+
+    // While the calculator is open, a look at the save file every few seconds.
+    private val saveCheck = object : Runnable {
+        override fun run() {
+            checkSave()
+            main.postDelayed(this, SAVE_CHECK_EVERY_MS)
+        }
+    }
     private var lastAutoBackup: String? = null
 
     private val chooseFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -143,10 +164,13 @@ class MainActivity : ComponentActivity() {
         webView.onResume()
         main.removeCallbacks(periodicBackup)
         main.postDelayed(periodicBackup, AUTO_BACKUP_EVERY_MS)
+        main.removeCallbacks(saveCheck)
+        main.post(saveCheck)
     }
 
     override fun onPause() {
         main.removeCallbacks(periodicBackup)
+        main.removeCallbacks(saveCheck)
         webView.onPause()
         super.onPause()
     }
@@ -159,6 +183,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         main.removeCallbacks(periodicBackup)
+        main.removeCallbacks(saveCheck)
         webView.destroy()
         io.shutdown()
         super.onDestroy()
@@ -286,6 +311,21 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    "save:hello" -> {
+                        // A page (re)loaded: it gets the watched file's name, and the file itself.
+                        saveReply = reply
+                        saveWatcher.resend()
+                        sendSaveStatus(null)
+                        checkSave()
+                    }
+                    "save:choose" -> {
+                        saveReply = reply
+                        chooseSave.launch(arrayOf("*/*"))
+                    }
+                    "save:stop" -> {
+                        saveWatcher.stop()
+                        sendSaveStatus(null)
+                    }
                     "backup:read" -> {
                         val name = json.optString("name")
                         io.execute {
@@ -307,6 +347,38 @@ class MainActivity : ComponentActivity() {
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(webView, DOWNLOAD_SHIM, setOf(ASSET_ORIGIN))
+        }
+    }
+
+    private fun sendSaveStatus(error: String?) {
+        val reply = saveReply ?: return
+        reply.postMessage(JSONObject().apply {
+            put("type", "save:status")
+            saveWatcher.name?.let { put("name", it) }
+            error?.let { put("error", it) }
+        }.toString())
+    }
+
+    /** Hands the save file to the page if it changed (read off the main thread). */
+    private fun checkSave() {
+        val reply = saveReply ?: return
+        if (saveWatcher.uri == null) return
+        io.execute {
+            val result = runCatching { saveWatcher.changed() }
+            main.post {
+                result.onSuccess { file ->
+                    if (file == null) return@onSuccess
+                    reply.postMessage(JSONObject().apply {
+                        put("type", "save:file")
+                        put("name", file.name)
+                        put("modified", file.modified)
+                        put("size", file.size)
+                        put("version", file.version)
+                        put("data", Base64.encodeToString(file.bytes, Base64.NO_WRAP))
+                    }.toString())
+                }
+                result.onFailure { sendSaveStatus("Couldn't read the save file: " + (it.message ?: it.javaClass.simpleName)) }
+            }
         }
     }
 
@@ -393,6 +465,7 @@ class MainActivity : ComponentActivity() {
         // A message from the page bigger than this (a backup or a saved file) is ignored.
         private const val MAX_MESSAGE = 30 * 1024 * 1024
         private const val AUTO_BACKUP_EVERY_MS = 10 * 60 * 1000L
+        private const val SAVE_CHECK_EVERY_MS = 3000L
 
         private val DOWNLOAD_SHIM = """
             (function () {

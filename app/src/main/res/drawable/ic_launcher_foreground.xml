@@ -1,17 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A calculator: white body, red display and keys (108dp adaptive-icon canvas). -->
+<!-- Pcalc: a handheld calculator whose screen shows an HP bar with a chunk of damage taken out of it.
+     Drawn inside the adaptive icon's 66 dp safe circle (108 dp canvas). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="1.1"
+        android:scaleY="1.1">
+    <!-- Body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M40,28h28a4,4 0,0 1,4 4v44a4,4 0,0 1,-4 4h-28a4,4 0,0 1,-4 -4v-44a4,4 0,0 1,4 -4z" />
+        android:pathData="M42,27h24a6,6 0,0 1,6 6v42a6,6 0,0 1,-6 6h-24a6,6 0,0 1,-6 -6v-42a6,6 0,0 1,6 -6z" />
+    <!-- Screen -->
+    <path
+        android:fillColor="#1E2630"
+        android:pathData="M42.5,32h23a2.5,2.5 0,0 1,2.5 2.5v11a2.5,2.5 0,0 1,-2.5 2.5h-23a2.5,2.5 0,0 1,-2.5 -2.5v-11a2.5,2.5 0,0 1,2.5 -2.5z" />
+    <!-- HP bar: the empty track, what's left (green) and the damage just dealt (amber) -->
+    <path
+        android:fillColor="#3C4652"
+        android:pathData="M44,38.5h20a1.5,1.5 0,0 1,0 3h-20a1.5,1.5 0,0 1,0 -3z" />
+    <path
+        android:fillColor="#3DDC84"
+        android:pathData="M44,38.5h9v3h-9a1.5,1.5 0,0 1,0 -3z" />
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M53,38.5h5v3h-5z" />
+    <!-- Keys -->
     <path
         android:fillColor="#D63031"
-        android:pathData="M41,33h26v12h-26z
-            M41,50h6v6h-6z M51,50h6v6h-6z M61,50h6v6h-6z
-            M41,60h6v6h-6z M51,60h6v6h-6z M61,60h6v6h-6z
-            M41,70h6v6h-6z M51,70h6v6h-6z M61,70h6v6h-6z" />
+        android:pathData="M42,55a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
+            M51,55a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
+            M60,55a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
+            M42,64a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
+            M51,64a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
+            M60,64a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
+            M42,73a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
+            M51,73a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z" />
+    <!-- The "=" key, wider -->
+    <path
+        android:fillColor="#1E2630"
+        android:pathData="M60,70h3a3,3 0,0 1,0 6h-3a3,3 0,0 1,0 -6z" />
+    </group>
 </vector>
