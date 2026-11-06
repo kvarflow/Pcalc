@@ -1,3 +1,5 @@
+import java.net.URI
+import java.net.URL
 import org.gradle.api.file.FileSystemOperations
 import javax.inject.Inject
 
@@ -55,6 +57,9 @@ android {
     // The calculator's pages and data are packed as-is; compressing them saves little.
     androidResources {
         noCompress += listOf("png", "jpg", "webp")
+        // The default also skips folders starting with "_", which would drop every trainer picture
+        // (smogon/sprites keeps them under _uncategorized/). Skip only version-control clutter.
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 }
 
@@ -138,6 +143,60 @@ abstract class CopySprites : DefaultTask() {
     }
 }
 
+/**
+ * Packs the images the calculator loads from elsewhere by a fixed address (trainer pictures, item
+ * icons, Professor Oak), which rr-calc's build lists in dist/offline-assets.json, under
+ * remote/<host>/<path>, where the app answers those addresses from (MainActivity.bundledRemote).
+ * Each is downloaded once into build/remote-cache and kept; the addresses pin a commit, so a cached
+ * file never goes stale. A calculator built before offline-assets.json existed has nothing to pack.
+ */
+abstract class PackRemoteAssets : DefaultTask() {
+    @get:InputFiles
+    @get:Optional
+    abstract val list: RegularFileProperty
+
+    @get:Internal
+    abstract val cacheDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
+    @TaskAction
+    fun pack() {
+        val listFile = list.orNull?.asFile
+        val urls = if (listFile != null && listFile.isFile) {
+            Regex("\"(https://[^\"]+)\"").findAll(listFile.readText()).map { it.groupValues[1] }.toList()
+        } else {
+            emptyList()
+        }
+        val cache = cacheDir.get().asFile
+        for (url in urls) {
+            val uri = URI(url)
+            val target = cache.resolve(uri.host + uri.path)
+            if (target.isFile && target.length() > 0) continue
+            target.parentFile.mkdirs()
+            val partial = File(target.path + ".part")
+            URL(url).openStream().use { input -> partial.outputStream().use { input.copyTo(it) } }
+            check(partial.renameTo(target)) { "Couldn't save $target" }
+        }
+        val wanted = urls.map { URI(it).let { u -> u.host + u.path } }.toSet()
+        fs.sync {
+            from(cache) { include { it.isDirectory || it.relativePath.pathString in wanted } }
+            into(outputDir.dir("remote"))
+            includeEmptyDirs = false
+        }
+        logger.lifecycle("Packed ${wanted.size} images the calculator loads from elsewhere")
+    }
+}
+
+val packRemoteAssets = tasks.register<PackRemoteAssets>("packRemoteAssets") {
+    list.set(calcDist.map { it.file("offline-assets.json") })
+    cacheDir.set(layout.buildDirectory.dir("remote-cache"))
+}
+
 val copySprites = tasks.register<CopySprites>("copySprites") {
     sprites.set(rootProject.layout.projectDirectory.dir("sprites"))
 }
@@ -146,5 +205,6 @@ androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(copyCalc, CopyCalc::outputDir)
         variant.sources.assets?.addGeneratedSourceDirectory(copySprites, CopySprites::outputDir)
+        variant.sources.assets?.addGeneratedSourceDirectory(packRemoteAssets, PackRemoteAssets::outputDir)
     }
 }
