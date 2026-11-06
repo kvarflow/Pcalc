@@ -22,7 +22,7 @@ Pcalc is in **beta** (`0.1.0-beta.N`), so its releases are marked *Pre-release*.
 2. Merge that change to `main`.
 3. In [Actions](https://github.com/kvarflow/Pcalc/actions/workflows/build.yml), choose **Run workflow** on `main`, tick **release** and run it. Pushing a `v<versionName>` tag does the same.
 
-The workflow builds the APK, creates the `v<versionName>` tag and publishes the release. Versions with a suffix, such as `-beta.2`, are marked pre-release.
+The workflow builds the APK, creates the `v<versionName>` tag and publishes the release. Versions with a suffix, such as `-beta.2`, are marked pre-release. To rebuild a beta under the same version, tick **replace** as well: the old pre-release and its tag are deleted first. A full release can't be replaced.
 
 ## What the app adds around the calculator
 

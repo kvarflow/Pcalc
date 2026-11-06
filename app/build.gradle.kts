@@ -248,7 +248,7 @@ abstract class PackRemoteAssets : DefaultTask() {
     }
 
     companion object {
-        private val ALLOWED_HOSTS = setOf("raw.githubusercontent.com")
+        private val ALLOWED_HOSTS = setOf("raw.githubusercontent.com", "play.pokemonshowdown.com")
         private val PNG = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
         private const val MAX_IMAGE = 1024 * 1024
     }

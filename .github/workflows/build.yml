@@ -9,6 +9,10 @@ on:
         description: "Publish a release for the versionName in app/build.gradle.kts (run on main)"
         type: boolean
         default: false
+      replace:
+        description: "Replace an existing pre-release of that version (betas only)"
+        type: boolean
+        default: false
 
 # Read-only unless a job asks for more (only the release job does).
 permissions:
@@ -147,7 +151,13 @@ jobs:
             where="--verify-tag"
           else
             if gh release view "$tag" >/dev/null 2>&1; then
-              echo "::error::Release $tag already exists: raise versionName first"; exit 1
+              # Only a pre-release (-beta.N) may be replaced, and only when asked to.
+              case "$version" in *-*) prerelease=1;; *) prerelease=0;; esac
+              if [ "${{ inputs.replace }}" = true ] && [ "$prerelease" = 1 ]; then
+                gh release delete "$tag" --cleanup-tag --yes
+              else
+                echo "::error::Release $tag already exists: raise versionName first (a pre-release can be replaced with \"replace\")"; exit 1
+              fi
             fi
             where="--target ${GITHUB_SHA}"
           fi

@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
      *  - to the APK's assets for the calculator itself;
      *  - emulator sync (http://127.0.0.1:31125) is answered by the app itself, reading RetroArch;
      *  - other requests to this device (127.0.0.1 / localhost) are blocked;
-     *  - the images it loads from GitHub (sprites, trainers, items) come from the APK too;
+     *  - the images it loads from elsewhere (sprites, trainer pictures, item icons) come from the APK too;
      *  - nowhere else (analytics and other trackers get an empty answer).
      * Links to other sites open in the browser.
      */
@@ -406,7 +406,9 @@ class MainActivity : ComponentActivity() {
         private const val ASSET_ORIGIN = "https://$ASSET_HOST"
         private const val START_URL = "$ASSET_ORIGIN/calc/index.html?app=1"
         private val LOCAL_HOSTS = setOf("127.0.0.1", "localhost")
-        private val IMAGE_HOSTS = setOf("raw.githubusercontent.com")
+        // Where the calculator loads its images from: Pokémon sprites, item icons and Oak from GitHub,
+        // trainer pictures from Pokémon Showdown. All are answered from the APK.
+        private val IMAGE_HOSTS = setOf("raw.githubusercontent.com", "play.pokemonshowdown.com")
         // rr-calc's emulator sync (js/emulator_sync.js EMULATOR_URL).
         private const val SYNC_PORT = 31125
         private val SYNC_HEADERS = mapOf(
