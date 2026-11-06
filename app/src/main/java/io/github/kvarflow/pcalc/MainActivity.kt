@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
      *  - to the APK's assets for the calculator itself;
      *  - emulator sync (http://127.0.0.1:31125) is answered by the app itself, reading RetroArch;
      *  - other requests to this device (127.0.0.1 / localhost) go through;
-     *  - the calculator's sprites (which it asks GitHub for) come from the APK too;
+     *  - the images it loads from GitHub (sprites, trainers, items) come from the APK too;
      *  - nowhere else (analytics and other trackers get an empty answer).
      * Links to other sites open in the browser.
      */
@@ -149,7 +149,7 @@ class MainActivity : ComponentActivity() {
                     if (url.path.orEmpty().endsWith("/sw.js")) empty(404, "Not Found")
                     else assetLoader.shouldInterceptRequest(url) ?: empty(404, "Not Found")
                 in LOCAL_HOSTS -> if (url.port == SYNC_PORT) syncResponse(request) else null
-                SPRITE_HOST -> bundledSprite(url.path.orEmpty())
+                in IMAGE_HOSTS -> bundledRemote(url.host!!, url.path.orEmpty())
                 else -> empty(204, "Blocked")
             }
         }
@@ -217,21 +217,28 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The calculator loads sprites from raw.githubusercontent.com; the same images are packed in
-     * the APK under sprites/ (see copySprites in app/build.gradle.kts), so they work offline.
-     * A sprite the set doesn't have gets 404, and the calculator falls back as it does online.
+     * Images the calculator loads from elsewhere, answered from the APK so they work offline:
+     *  - those rr-calc lists in offline-assets.json (trainer pictures, item icons, Oak), packed under
+     *    remote/<host>/<path> (packRemoteAssets in app/build.gradle.kts);
+     *  - Pokémon sprites, whose addresses follow a pattern, from the whole set under sprites/
+     *    (copySprites);
+     *  - Professor Oak from sprites/trainers/, for calculators from before offline-assets.json.
+     * Anything else gets 404, and the calculator falls back as it does online when an image is missing.
      */
-    private fun bundledSprite(path: String): WebResourceResponse {
-        val asset = when {
-            path.startsWith(POKEMON_SPRITES) -> "sprites/" + path.removePrefix(POKEMON_SPRITES)
-            path == OAK_SPRITE -> "sprites/trainers/Oak.png"
-            else -> return empty(404, "Not Found")
+    private fun bundledRemote(host: String, path: String): WebResourceResponse {
+        val candidates = buildList {
+            add("remote/$host$path")
+            if (path.startsWith(POKEMON_SPRITES)) add("sprites/" + path.removePrefix(POKEMON_SPRITES))
+            if (path.endsWith(OAK_SPRITE)) add("sprites/trainers/Oak.png")
         }
-        return try {
-            WebResourceResponse("image/png", null, assets.open(asset))
-        } catch (e: java.io.IOException) {
-            empty(404, "Not Found")
+        for (asset in candidates) {
+            try {
+                return WebResourceResponse("image/png", null, assets.open(asset))
+            } catch (e: java.io.IOException) {
+                // not packed: try the next
+            }
         }
+        return empty(404, "Not Found")
     }
 
     private val retroArch = RetroArchSync()
@@ -282,7 +289,7 @@ class MainActivity : ComponentActivity() {
         private const val ASSET_ORIGIN = "https://$ASSET_HOST"
         private const val START_URL = "$ASSET_ORIGIN/calc/index.html?app=1"
         private val LOCAL_HOSTS = setOf("127.0.0.1", "localhost")
-        private const val SPRITE_HOST = "raw.githubusercontent.com"
+        private val IMAGE_HOSTS = setOf("raw.githubusercontent.com")
         // rr-calc's emulator sync (js/emulator_sync.js EMULATOR_URL).
         private const val SYNC_PORT = 31125
         private val SYNC_HEADERS = mapOf(
@@ -293,7 +300,7 @@ class MainActivity : ComponentActivity() {
         )
         // The URLs rr-calc uses (box_controls.js SPRITE_BASE_URL, trainer_controls.js OAK_SPRITE_URL).
         private const val POKEMON_SPRITES = "/May8th1995/sprites/master/"
-        private const val OAK_SPRITE = "/smogon/sprites/master/src/_uncategorized/canonical/trainers/gen3/firered-leafgreen/Oak.png"
+        private const val OAK_SPRITE = "/trainers/gen3/firered-leafgreen/Oak.png"
         private const val BRIDGE_NAME = "PcalcNative"
 
         private val DOWNLOAD_SHIM = """

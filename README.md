@@ -25,6 +25,7 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
   * The calculator's own files come from the APK.
   * Emulator sync (`http://127.0.0.1:31125`) is answered by the app itself (see below). Other requests to `127.0.0.1`/`localhost` go through.
   * Pokémon sprites, which the calculator asks GitHub for, are answered from the APK. They come from the [May8th1995/sprites](https://github.com/May8th1995/sprites) submodule (`sprites/`, about 1 MB), plus Professor Oak from [smogon/sprites](https://github.com/smogon/sprites).
+  * Other images the calculator loads by a fixed address (trainer pictures, item icons, Oak) are answered from the APK too. rr-calc's build lists them in `offline-assets.json`, and `packRemoteAssets` downloads each one once, into `app/build/remote-cache`, and packs it under `assets/remote/<host>/<path>`.
   * Everything else gets an empty answer, which includes analytics. Links to other sites open in the browser.
 * **Files:** *Import .sav* opens Android's file picker. Files the calculator saves, such as the frag sheet CSV, ask where to save.
 * **Thor-friendly:**
