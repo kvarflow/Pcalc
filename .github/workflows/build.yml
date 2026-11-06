@@ -1,0 +1,61 @@
+name: Build APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # The calculator, at the rr-calc commit the submodule pins.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Build the calculator (rr-calc)
+        working-directory: rr-calc
+        run: |
+          # rr-calc's install scripts also run calc's "bundle" step, which the pages don't use and
+          # which currently fails on a fresh install; compile the engine the pages load instead.
+          npm ci --ignore-scripts --no-audit --no-fund
+          (cd calc && npm ci --ignore-scripts --no-audit --no-fund && npx tsc -p .)
+          node build
+
+      # The app.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build APK
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Name the APK
+        run: |
+          version=$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+          cp app/build/outputs/apk/release/app-release.apk "Pcalc-${version}-${GITHUB_SHA::7}.apk"
+          echo "APK=Pcalc-${version}-${GITHUB_SHA::7}.apk" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pcalc-apk
+          path: ${{ env.APK }}
+
+      # Every push to main replaces the "latest" release, so the newest APK is always one tap
+      # away on the Thor: github.com/kvarflow/Pcalc/releases/latest
+      - name: Publish the "latest" release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest "$APK" --latest --target "$GITHUB_SHA" \
+            --title "Latest build (${GITHUB_SHA::7})" \
+            --notes "Built from ${GITHUB_SHA::7} with rr-calc $(git -C rr-calc rev-parse --short HEAD). Install Pcalc-*.apk on the Thor."

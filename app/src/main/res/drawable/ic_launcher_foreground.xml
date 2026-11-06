@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A calculator: white body, red display and keys (108dp adaptive-icon canvas). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,28h28a4,4 0,0 1,4 4v44a4,4 0,0 1,-4 4h-28a4,4 0,0 1,-4 -4v-44a4,4 0,0 1,4 -4z" />
+    <path
+        android:fillColor="#D63031"
+        android:pathData="M41,33h26v12h-26z
+            M41,50h6v6h-6z M51,50h6v6h-6z M61,50h6v6h-6z
+            M41,60h6v6h-6z M51,60h6v6h-6z M61,60h6v6h-6z
+            M41,70h6v6h-6z M51,70h6v6h-6z M61,70h6v6h-6z" />
+</vector>
