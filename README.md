@@ -1,6 +1,12 @@
 # Pcalc
 
-A Pokémon damage calculator app for Android, made for the AYN Thor's second screen. The calculator runs entirely offline, from inside the APK.
+A Pokémon damage calculator app for Android, made for the AYN Thor's second screen. It runs entirely offline, from inside the APK.
+
+What you get:
+* **The Radical Red calculator**, with the Thor's small-screen layout, as on the website.
+* **Pictures:** all Pokémon sprites, trainer pictures and item icons are bundled, so they work offline too.
+* **Emulator sync built in:** the calculator follows the battle in RetroArch on the other screen.
+* **Backups:** your boxes, runs and settings are backed up to a folder on the device automatically.
 
 The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc is the app around it: it pins an rr-calc commit as a git submodule (`rr-calc/`), builds it and packs the result into the APK.
 
@@ -23,16 +29,29 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
 * **Offline:** the pages are served from the APK at `https://appassets.androidplatform.net/calc/`. That is a secure origin, so your box, settings and runs persist between launches as they do in a browser.
 * **Requests are limited:**
   * The calculator's own files come from the APK.
-  * Emulator sync (`http://127.0.0.1:31125`) is answered by the app itself (see below). Other requests to `127.0.0.1`/`localhost` go through.
+  * Emulator sync (`http://127.0.0.1:31125`) is answered by the app itself (see below). Other requests to `127.0.0.1`/`localhost` are blocked.
   * Pokémon sprites, which the calculator asks GitHub for, are answered from the APK. They come from the [May8th1995/sprites](https://github.com/May8th1995/sprites) submodule (`sprites/`, about 1 MB), plus Professor Oak from [smogon/sprites](https://github.com/smogon/sprites).
   * Other images the calculator loads by a fixed address (trainer pictures, item icons, Oak) are answered from the APK too. rr-calc's build lists them in `offline-assets.json`, and `packRemoteAssets` downloads each one once, into `app/build/remote-cache`, and packs it under `assets/remote/<host>/<path>`.
-  * Everything else gets an empty answer, which includes analytics. Links to other sites open in the browser.
-* **Files:** *Import .sav* opens Android's file picker. Files the calculator saves, such as the frag sheet CSV, ask where to save.
+  * Everything else gets an empty answer, which includes analytics. Web and email links open in the browser or mail app; links of any other kind are ignored.
+* **Files:** *Import .sav* opens Android's file picker. Files the calculator saves, such as the frag sheet CSV or a backup, ask where to save.
 * **Thor-friendly:**
   * The app is full screen.
   * Moving it between the two screens or rotating doesn't reload it.
   * Back, including the B button, goes back a page but never closes the calculator.
 * **Identification:** the user agent ends in `Pcalc/<version>`, so the calculator can tell it's in the app.
+
+## Backups
+
+Everything the calculator keeps is saved inside the app and survives updates: every mode's box, runs, personal bests, settings and fight notes. Backups protect it from the rest, such as uninstalling, clearing storage, a new device or a factory reset.
+
+* **Automatic:** the app backs up whenever you leave it, and every 10 minutes while it's open, if anything changed. The latest 10 automatic backups are kept.
+* **Where:** by default, the app's own folder on the device (`Android/data/io.github.kvarflow.pcalc/files/backups`). That survives updates but goes if the app is uninstalled.
+* **Your own folder:** in the calculator, open **More › Backup › Choose folder** and pick any folder, such as Documents or the SD card. Backups go there from then on, and they survive uninstalling.
+* **If that folder can't be written** (moved, card removed, permission revoked), backups fall back to the app's folder rather than being lost.
+* **Back up now / Restore:** in the same panel. Restoring replaces what's saved with the backup, after asking. The app first backs up what's there, so a restore can be undone.
+* **Save backup file / Restore from file:** a single backup file you can keep anywhere. The same file restores on the website.
+
+After reinstalling, choose the same folder again, then restore its newest backup.
 
 ## Emulator sync with RetroArch, built in
 
@@ -77,9 +96,42 @@ git commit -am "rr-calc: update to <commit>"
 
 ### Signing
 
-Builds are signed with `keystore/pcalc-sideload.jks` (password `pcalc-sideload`), which is committed on purpose. That way every build, from CI or a laptop, installs over the previous one without losing the calculator's saved data.
+**Releases** are signed with the release key, which is kept only in the repository's secrets and used only by the release job. They're signed through Android's APK key rotation:
+* The old sideload key, `keystore/pcalc-sideload.jks`, is public. It vouches for the release key and gives up the right to replace the app (`--set-rollback false`).
+* A phone with an earlier build therefore updates in place and keeps its data.
+* From then on, nothing signed with the public sideload key can replace Pcalc.
 
-It isn't a secret, so anyone could sign an APK that installs over Pcalc. Only install APKs from this repo's releases. Before publishing anywhere public, switch to a key kept in the repo's secrets.
+This needs Android 9 or later, which is why `minSdk` is 28.
+
+Until the release key is in the secrets, releases keep the sideload signature and the workflow warns about it. Builds that aren't releases, such as branches, pull requests and local builds, always use the sideload key. Once releases use the release key, those builds won't install over a release.
+
+#### Setting up the release key (once)
+
+1. On a computer with Java (`keytool` comes with it), make the key. Choose a strong password and keep both the file and the password safe, for example in a password manager. If they're lost, future updates can't install over the app.
+
+   ```sh
+   keytool -genkeypair -keystore pcalc-release.jks -storetype PKCS12 -alias pcalc-release \
+     -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Pcalc release"
+   ```
+
+2. Turn the file into text: `base64 -w0 pcalc-release.jks` on Linux, or `base64 -i pcalc-release.jks` on macOS.
+3. On GitHub, go to **Settings › Secrets and variables › Actions › New repository secret** and add:
+   * `PCALC_RELEASE_KEYSTORE`: the base64 text.
+   * `PCALC_RELEASE_KEYSTORE_PASSWORD`: the password.
+4. Make the next release. Its notes say "Signed with the release key". Install it over the previous one: it should update, not reinstall, and keep your data.
+
+### Security
+
+* **Network:** none needed. The network security config allows unencrypted traffic only to the device itself, and trusts no user-added certificate authorities.
+* **Bridge:** only the calculator's own origin can message the app (`WebMessageListener`, main frame only). It can hand over a file to save, a backup, or ask for one of the app's backups by its exact name. Message sizes are capped.
+* **Files:** the WebView can't read files (`allowFileAccess` and `allowContentAccess` are off). The `.sav` import only gets the file you pick.
+* **Emulator sync:** it only reads RetroArch's memory, never writes. A reply that isn't RetroArch's is reported, never crashes the app.
+* **Build:**
+  * The actions are pinned to exact commits.
+  * The Gradle wrapper is validated.
+  * npm packages install from lockfiles with their scripts off.
+  * Every downloaded image must be a PNG matching its sha256 in `app/remote-assets.lock`. After an intended change, run `./gradlew packRemoteAssets -PupdateRemoteAssetsLock` and commit the lock.
+* **Releases:** the release job is the only one with write access or the signing key. It checks the signature before publishing, and publishes the APK's sha256 alongside it.
 
 ## Licence
 

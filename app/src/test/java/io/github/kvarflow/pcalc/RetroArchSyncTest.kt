@@ -106,4 +106,16 @@ class RetroArchSyncTest {
             assertEquals("RetroArch did not answer: is a game running, with Network Commands on?", e.message)
         }
     }
+
+    @Test
+    fun saysWhenSomethingElseAnswers() {
+        // Not RetroArch: a reply that has the right shape but no bytes in it.
+        val port = fakeRetroArch { address, _ -> "READ_CORE_MEMORY %x zz not-memory".format(address) }
+        try {
+            RetroArchSync(port = port).stateJson()
+            fail("expected an error")
+        } catch (e: RetroArchSync.RetroArchException) {
+            assertEquals("Something other than RetroArch answered on port $port", e.message)
+        }
+    }
 }
