@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.kvarflow.pcalc"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.0-beta.2"
+        versionCode = 3
+        versionName = "0.1.0-beta.3"
     }
 
     signingConfigs {
@@ -62,6 +62,12 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.webkit:webkit:1.12.1")
+    testImplementation("junit:junit:4.13.2")
+}
+
+tasks.withType<Test>().configureEach {
+    // RetroArchSyncTest writes the /state it read here when asked (to compare with retroarch_sync.py).
+    providers.gradleProperty("syncStateOut").orNull?.let { systemProperty("syncStateOut", it) }
 }
 
 /**

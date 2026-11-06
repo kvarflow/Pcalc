@@ -23,7 +23,7 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
 * **Offline:** the pages are served from the APK at `https://appassets.androidplatform.net/calc/`. That is a secure origin, so your box, settings and runs persist between launches as they do in a browser.
 * **Requests are limited:**
   * The calculator's own files come from the APK.
-  * `127.0.0.1`/`localhost` is allowed, for emulator sync.
+  * Emulator sync (`http://127.0.0.1:31125`) is answered by the app itself (see below). Other requests to `127.0.0.1`/`localhost` go through.
   * Pokémon sprites, which the calculator asks GitHub for, are answered from the APK. They come from the [May8th1995/sprites](https://github.com/May8th1995/sprites) submodule (`sprites/`, about 1 MB), plus Professor Oak from [smogon/sprites](https://github.com/smogon/sprites).
   * Everything else gets an empty answer, which includes analytics. Links to other sites open in the browser.
 * **Files:** *Import .sav* opens Android's file picker. Files the calculator saves, such as the frag sheet CSV, ask where to save.
@@ -32,6 +32,20 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
   * Moving it between the two screens or rotating doesn't reload it.
   * Back, including the B button, goes back a page but never closes the calculator.
 * **Identification:** the user agent ends in `Pcalc/<version>`, so the calculator can tell it's in the app.
+
+## Emulator sync with RetroArch, built in
+
+The calculator can follow a battle in Radical Red as you play. It opens the trainer, loads the Pokémon each side has out, and sets their HP, stat changes and status as the game has them. On a computer this needs rr-calc's sync script running beside the emulator. In Pcalc it's built in, so there's nothing else to install.
+
+1. In RetroArch, play Radical Red with the **mGBA** core.
+2. Turn on **Settings › Network › Network Commands**, port 55355, and save the configuration.
+3. In Pcalc, import your `.sav` (so your Pokémon are in your box), then turn on **Emulator sync**, next to *Import .sav*.
+
+RetroArch can stay on the top screen and Pcalc on the bottom one.
+
+How it works: the calculator asks `http://127.0.0.1:31125/state` once a second. The app answers that request itself: `RetroArchSync.kt` reads the game's memory from RetroArch with `READ_CORE_MEMORY` over UDP and returns exactly what rr-calc's `emulator/retroarch_sync.py` returns. It only reads memory and changes nothing in the game.
+
+`RetroArchSyncTest` checks it against a fake RetroArch. Its output was also compared with the Python script's for the same memory: they're identical.
 
 ## Build
 
