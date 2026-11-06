@@ -102,7 +102,7 @@ git commit -am "rr-calc: update to <commit>"
 
 This needs Android 9 or later, which is why `minSdk` is 28.
 
-Until the release key is in the secrets, releases keep the sideload signature and the workflow warns about it. Builds that aren't releases, such as branches, pull requests and local builds, always use the sideload key. Once releases use the release key, those builds won't install over a release.
+From beta 4 on, a release without the release key in the secrets fails rather than fall back to the public sideload key (tick **allow_sideload** to publish with it anyway). Builds that aren't releases, such as branches, pull requests and local builds, always use the sideload key. Once releases use the release key, those builds won't install over a release.
 
 #### Setting up the release key (once)
 
