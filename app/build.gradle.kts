@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.kvarflow.pcalc"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-beta.1"
+        versionCode = 2
+        versionName = "0.1.0-beta.2"
     }
 
     signingConfigs {
@@ -105,8 +105,40 @@ val copyCalc = tasks.register<CopyCalc>("copyCalc") {
     dist.set(calcDist)
 }
 
+/**
+ * Copies the Pokémon sprites (the May8th1995/sprites submodule, the set rr-calc shows) into the
+ * APK's assets under sprites/, so the app can answer the calculator's sprite requests offline.
+ */
+abstract class CopySprites : DefaultTask() {
+    @get:InputDirectory
+    abstract val sprites: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
+    @TaskAction
+    fun copy() {
+        val root = sprites.get().asFile
+        check(root.listFiles { f -> f.name.endsWith(".png") }.orEmpty().isNotEmpty()) {
+            "No sprites in $root. Fetch the submodule:  git submodule update --init sprites"
+        }
+        fs.sync {
+            from(root) { include("*.png") }
+            into(outputDir.dir("sprites"))
+        }
+    }
+}
+
+val copySprites = tasks.register<CopySprites>("copySprites") {
+    sprites.set(rootProject.layout.projectDirectory.dir("sprites"))
+}
+
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(copyCalc, CopyCalc::outputDir)
+        variant.sources.assets?.addGeneratedSourceDirectory(copySprites, CopySprites::outputDir)
     }
 }

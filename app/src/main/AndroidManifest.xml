@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Only for emulator sync (127.0.0.1) and, until they are bundled, the Pokémon sprites.
-         The calculator itself is inside the APK and works with no connection. -->
+    <!-- Only for emulator sync, which talks to this device (127.0.0.1). The calculator and its
+         sprites are inside the APK and need no connection. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
