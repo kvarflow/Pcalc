@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pcalc: a handheld calculator whose screen shows an HP bar with a chunk of damage taken out of it.
-     Drawn inside the adaptive icon's 66 dp safe circle (108 dp canvas). -->
+<!-- Pcalc: three HP bars, as the damage rolls leave them (most, half, a sliver).
+     Drawn inside the adaptive icon's 66 dp safe circle (108 dp canvas). Also the themed (monochrome)
+     icon: the faint tracks stay faint and the bars solid. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -9,40 +10,24 @@
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:scaleX="1.1"
-        android:scaleY="1.1">
-    <!-- Body -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,27h24a6,6 0,0 1,6 6v42a6,6 0,0 1,-6 6h-24a6,6 0,0 1,-6 -6v-42a6,6 0,0 1,6 -6z" />
-    <!-- Screen -->
-    <path
-        android:fillColor="#1E2630"
-        android:pathData="M42.5,32h23a2.5,2.5 0,0 1,2.5 2.5v11a2.5,2.5 0,0 1,-2.5 2.5h-23a2.5,2.5 0,0 1,-2.5 -2.5v-11a2.5,2.5 0,0 1,2.5 -2.5z" />
-    <!-- HP bar: the empty track, what's left (green) and the damage just dealt (amber) -->
-    <path
-        android:fillColor="#3C4652"
-        android:pathData="M44,38.5h20a1.5,1.5 0,0 1,0 3h-20a1.5,1.5 0,0 1,0 -3z" />
-    <path
-        android:fillColor="#3DDC84"
-        android:pathData="M44,38.5h9v3h-9a1.5,1.5 0,0 1,0 -3z" />
-    <path
-        android:fillColor="#FFB300"
-        android:pathData="M53,38.5h5v3h-5z" />
-    <!-- Keys -->
-    <path
-        android:fillColor="#D63031"
-        android:pathData="M42,55a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
-            M51,55a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
-            M60,55a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
-            M42,64a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
-            M51,64a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
-            M60,64a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
-            M42,73a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z
-            M51,73a3,3 0,1 1,6 0a3,3 0,1 1,-6 0z" />
-    <!-- The "=" key, wider -->
-    <path
-        android:fillColor="#1E2630"
-        android:pathData="M60,70h3a3,3 0,0 1,0 6h-3a3,3 0,0 1,0 -6z" />
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        <!-- Tracks -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.16"
+            android:pathData="M35,33h38a5,5 0,0 1,0 10h-38a5,5 0,0 1,0 -10z
+                M35,49h38a5,5 0,0 1,0 10h-38a5,5 0,0 1,0 -10z
+                M35,65h38a5,5 0,0 1,0 10h-38a5,5 0,0 1,0 -10z" />
+        <!-- HP left: green, amber, red -->
+        <path
+            android:fillColor="#4ADE80"
+            android:pathData="M35,33h30a5,5 0,0 1,0 10h-30a5,5 0,0 1,0 -10z" />
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M35,49h15a5,5 0,0 1,0 10h-15a5,5 0,0 1,0 -10z" />
+        <path
+            android:fillColor="#F87171"
+            android:pathData="M35,65h1a5,5 0,0 1,0 10h-1a5,5 0,0 1,0 -10z" />
     </group>
 </vector>
