@@ -1,13 +1,23 @@
 package io.github.kvarflow.pcalc
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
+import android.app.ActivityOptions
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.view.Display
+import android.view.View
+import android.view.animation.PathInterpolator
 import android.util.Base64
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -20,6 +30,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.splashscreen.SplashScreenViewProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -42,6 +54,8 @@ import java.util.concurrent.Executors
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
+    // The opening screen stays up until the calculator has loaded (or STARTUP_LIMIT_MS has passed).
+    private var calcLoaded = false
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
             .addPathHandler("/calc/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -115,7 +129,11 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splash.setKeepOnScreenCondition { !calcLoaded }
+        splash.setOnExitAnimationListener(::fadeOutSplash)
+        main.postDelayed({ calcLoaded = true }, STARTUP_LIMIT_MS)
         goFullScreen()
 
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
@@ -138,7 +156,10 @@ class MainActivity : ComponentActivity() {
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(START_URL)
+        } else {
+            calcLoaded = true
         }
+        if (savedInstanceState == null) main.post(::moveToBottomScreen)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -147,6 +168,70 @@ class MainActivity : ComponentActivity() {
                 if (webView.canGoBack()) webView.goBack() else moveTaskToBack(true)
             }
         })
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Opened again from the launcher, maybe the top screen's: back to the bottom screen.
+        if (intent.action == Intent.ACTION_MAIN) main.post(::moveToBottomScreen)
+    }
+
+    /**
+     * On a device with two screens (the AYN Thor), Pcalc goes to the smaller one, under the game
+     * (BottomScreen). Android moves the running calculator there as it is; nothing reloads.
+     */
+    private fun moveToBottomScreen() {
+        try {
+            val displays = getSystemService(DisplayManager::class.java) ?: return
+            @Suppress("DEPRECATION")
+            val current = (if (android.os.Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay) ?: return
+            val target = BottomScreen.pick(screenOf(current), displays.displays.map(::screenOf)) ?: return
+            startActivity(
+                Intent(this, MainActivity::class.java),
+                ActivityOptions.makeBasic().setLaunchDisplayId(target).toBundle(),
+            )
+        } catch (e: RuntimeException) {
+            // The system wouldn't move it (a screen apps can't use): it stays where it opened.
+        }
+    }
+
+    private fun screenOf(display: Display): BottomScreen.Screen {
+        val mode = display.mode
+        return BottomScreen.Screen(
+            id = display.displayId,
+            width = mode.physicalWidth,
+            height = mode.physicalHeight,
+            on = display.state == Display.STATE_ON,
+            private = display.flags and Display.FLAG_PRIVATE != 0,
+        )
+    }
+
+    /**
+     * The opening screen's exit: once the bars have filled in, the icon lifts a little and fades
+     * while the navy fades away to the calculator underneath.
+     */
+    private fun fadeOutSplash(provider: SplashScreenViewProvider) {
+        val view = provider.view
+        val icon: View? = runCatching { provider.iconView }.getOrNull()
+        val iconDone = provider.iconAnimationStartMillis + provider.iconAnimationDurationMillis
+        val wait = (iconDone - SystemClock.uptimeMillis()).coerceIn(0L, 700L)
+        val ease = PathInterpolator(0.2f, 0f, 0f, 1f)
+        val parts = mutableListOf<Animator>(
+            ObjectAnimator.ofFloat(view, View.ALPHA, 1f, 0f).setDuration(320),
+        )
+        if (icon != null) {
+            parts += ObjectAnimator.ofFloat(icon, View.SCALE_X, 1f, 1.08f).setDuration(320)
+            parts += ObjectAnimator.ofFloat(icon, View.SCALE_Y, 1f, 1.08f).setDuration(320)
+        }
+        AnimatorSet().apply {
+            playTogether(parts)
+            interpolator = ease
+            startDelay = wait + 120
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) = provider.remove()
+            })
+            start()
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -247,6 +332,8 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            // Give the page a moment to draw itself (its theme, its tab) before the opening screen goes.
+            main.postDelayed({ calcLoaded = true }, 150)
             // Older WebViews can't add the bridge script before the page's own; add it now instead.
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 view.evaluateJavascript(DOWNLOAD_SHIM, null)
@@ -465,6 +552,8 @@ class MainActivity : ComponentActivity() {
         // A message from the page bigger than this (a backup or a saved file) is ignored.
         private const val MAX_MESSAGE = 30 * 1024 * 1024
         private const val AUTO_BACKUP_EVERY_MS = 10 * 60 * 1000L
+        // The longest the opening screen waits for the calculator before it goes anyway.
+        private const val STARTUP_LIMIT_MS = 4000L
         private const val SAVE_CHECK_EVERY_MS = 3000L
 
         private val DOWNLOAD_SHIM = """

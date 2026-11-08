@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
       allow_sideload:
-        description: "Publish with the old public sideload key if the release key isn't set up (not recommended)"
+        description: "Publish a full release with the old public sideload key if the release key isn't set up (not recommended; betas may anyway)"
         type: boolean
         default: false
 
@@ -111,9 +111,11 @@ jobs:
         run: |
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           if [ -z "$RELEASE_KEYSTORE" ] || [ -z "$RELEASE_KEYSTORE_PASSWORD" ]; then
-            # From beta 4 on, releases are signed with the release key; publishing with the public
-            # sideload key needs "allow_sideload" ticked on purpose.
-            if [ "${{ inputs.allow_sideload }}" != true ]; then
+            # Betas may keep the sideload key; full releases are signed with the release key, and
+            # publishing one with the public sideload key needs "allow_sideload" ticked on purpose.
+            version=$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+            case "$version" in *-*) beta=1;; *) beta=0;; esac
+            if [ "$beta" = 0 ] && [ "${{ inputs.allow_sideload }}" != true ]; then
               echo "::error::No release key in the repository secrets (PCALC_RELEASE_KEYSTORE, PCALC_RELEASE_KEYSTORE_PASSWORD). See README, Signing."
               exit 1
             fi

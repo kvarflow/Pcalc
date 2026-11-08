@@ -5,4 +5,12 @@
         <item name="android:colorAccent">@color/calc_red</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
+
+    <!-- The opening screen: the icon on the icon's navy, held until the calculator has loaded, then
+         faded away (MainActivity). From Android 12 the bars grow in (values-v31). -->
+    <style name="Theme.Pcalc.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Pcalc</item>
+    </style>
 </resources>
