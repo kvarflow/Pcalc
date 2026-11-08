@@ -13,6 +13,10 @@ on:
         description: "Replace an existing pre-release of that version (betas only)"
         type: boolean
         default: false
+      allow_sideload:
+        description: "Publish a full release with the old public sideload key if the release key isn't set up (not recommended; betas may anyway)"
+        type: boolean
+        default: false
 
 # Read-only unless a job asks for more (only the release job does).
 permissions:
@@ -107,7 +111,15 @@ jobs:
         run: |
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           if [ -z "$RELEASE_KEYSTORE" ] || [ -z "$RELEASE_KEYSTORE_PASSWORD" ]; then
-            echo "::warning::No release key in the repository secrets: this release keeps the sideload signature. See README, Signing."
+            # Betas may keep the sideload key; full releases are signed with the release key, and
+            # publishing one with the public sideload key needs "allow_sideload" ticked on purpose.
+            version=$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+            case "$version" in *-*) beta=1;; *) beta=0;; esac
+            if [ "$beta" = 0 ] && [ "${{ inputs.allow_sideload }}" != true ]; then
+              echo "::error::No release key in the repository secrets (PCALC_RELEASE_KEYSTORE, PCALC_RELEASE_KEYSTORE_PASSWORD). See README, Signing."
+              exit 1
+            fi
+            echo "::warning::No release key in the repository secrets: this release keeps the sideload signature."
             echo "SIGNED_WITH=sideload" >> "$GITHUB_ENV"
             exit 0
           fi

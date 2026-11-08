@@ -15,8 +15,8 @@ android {
         // Android 9: the first with APK signing key rotation (see README, Signing).
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.1.0-beta.3"
+        versionCode = 4
+        versionName = "0.1.0-beta.4"
     }
 
     signingConfigs {
@@ -73,6 +73,7 @@ android {
 dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.webkit:webkit:1.12.1")
     testImplementation("junit:junit:4.13.2")

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The opening screen's icon: the bars fill in one after another, as a damage roll lands. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/splash_bars">
+    <target android:name="green">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="pathData"
+                android:valueType="pathType"
+                android:valueFrom="M35,33h0a5,5 0,0 1,0 10h0a5,5 0,0 1,0 -10z"
+                android:valueTo="M35,33h30a5,5 0,0 1,0 10h-30a5,5 0,0 1,0 -10z"
+                android:startOffset="0"
+                android:duration="520"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+    <target android:name="amber">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="pathData"
+                android:valueType="pathType"
+                android:valueFrom="M35,49h0a5,5 0,0 1,0 10h0a5,5 0,0 1,0 -10z"
+                android:valueTo="M35,49h15a5,5 0,0 1,0 10h-15a5,5 0,0 1,0 -10z"
+                android:startOffset="90"
+                android:duration="520"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+    <target android:name="red">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="pathData"
+                android:valueType="pathType"
+                android:valueFrom="M35,65h0a5,5 0,0 1,0 10h0a5,5 0,0 1,0 -10z"
+                android:valueTo="M35,65h1a5,5 0,0 1,0 10h-1a5,5 0,0 1,0 -10z"
+                android:startOffset="180"
+                android:duration="520"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+</animated-vector>

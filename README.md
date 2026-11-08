@@ -5,8 +5,10 @@ A Pokémon damage calculator app for Android, made for the AYN Thor's second scr
 What you get:
 * **The calculator**, with the Thor's small-screen layout, as on the website. More games are on the way: each one you pick has its own box, runs and settings.
 * **Pictures:** all Pokémon sprites, trainer pictures and item icons come with the calculator itself, so they work offline too.
-* **Emulator sync built in:** the calculator follows the battle in RetroArch on the other screen.
+* **Emulator sync built in:** the calculator follows the battle in RetroArch on the other screen, and connects by itself as soon as RetroArch answers.
 * **Backups:** your boxes, runs and settings are backed up to a folder on the device automatically.
+* **Auto-import:** the game's save is imported by itself each time the game saves.
+* **Made for the Thor's lower screen:** it opens there by itself, the tabs sit at the bottom, in reach of your thumbs, and there's a Black theme for its OLED screens.
 
 The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc is the app around it, game-neutral by design: it pins an rr-calc commit as a git submodule (`rr-calc/`), builds it and packs the result into the APK.
 
@@ -35,6 +37,8 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
 * **Files:** *Import .sav* opens Android's file picker. Files the calculator saves, such as the frag sheet CSV or a backup, ask where to save.
 * **Thor-friendly:**
   * The app is full screen.
+  * It opens on the smaller screen (the Thor's bottom one), even when started from the top screen's launcher. On a device with one screen, or with a bigger monitor plugged in, it stays where it opens.
+  * Its opening screen shows the icon's three HP bars filling in, on navy, until the calculator has loaded, then fades to it.
   * Moving it between the two screens or rotating doesn't reload it.
   * Back, including the B button, goes back a page but never closes the calculator.
 * **Identification:** the user agent ends in `Pcalc/<version>`, so the calculator can tell it's in the app.
@@ -51,6 +55,16 @@ Everything the calculator keeps is saved inside the app and survives updates: ev
 * **Save backup file / Restore from file:** a single backup file you can keep anywhere. The same file restores on the website.
 
 After reinstalling, choose the same folder again, then restore its newest backup.
+
+## Auto-import of the game's save
+
+Pcalc can import your save by itself each time the game saves, so your box keeps up as you play.
+
+1. In RetroArch, turn on **Settings › Saving › SaveRAM Autosave Interval** (say 10 seconds), so the game's save file is written as you play and not only when you quit.
+2. In Pcalc, import your save once with **Import .sav**, as before.
+3. Under **More › Import / Export › Auto-import**, choose **Choose save file** and pick the game's save. RetroArch keeps it as `<game>.srm` in its `saves` folder.
+
+While the calculator is open, the app looks at that file every few seconds and hands it over when it changes; the app only reads it. The import is quiet when it's the same run in the same mode. A save of the other mode, or of a new game (which would start a new run), is left for **Import .sav**, which asks first; the status line says which. **Stop** stops watching.
 
 ## Emulator sync with RetroArch, built in
 
@@ -102,7 +116,7 @@ git commit -am "rr-calc: update to <commit>"
 
 This needs Android 9 or later, which is why `minSdk` is 28.
 
-Until the release key is in the secrets, releases keep the sideload signature and the workflow warns about it. Builds that aren't releases, such as branches, pull requests and local builds, always use the sideload key. Once releases use the release key, those builds won't install over a release.
+Betas may still be published with the sideload key while the release key isn't set up. A full release without the release key in the secrets fails rather than fall back to the public sideload key (tick **allow_sideload** to publish with it anyway). Builds that aren't releases, such as branches, pull requests and local builds, always use the sideload key. Once releases use the release key, those builds won't install over a release.
 
 #### Setting up the release key (once)
 

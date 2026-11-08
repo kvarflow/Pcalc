@@ -1,17 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A calculator: white body, red display and keys (108dp adaptive-icon canvas). -->
+<!-- Pcalc: three HP bars, as the damage rolls leave them (most, half, a sliver).
+     Drawn inside the adaptive icon's 66 dp safe circle (108 dp canvas). Also the themed (monochrome)
+     icon: the faint tracks stay faint and the bars solid. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,28h28a4,4 0,0 1,4 4v44a4,4 0,0 1,-4 4h-28a4,4 0,0 1,-4 -4v-44a4,4 0,0 1,4 -4z" />
-    <path
-        android:fillColor="#D63031"
-        android:pathData="M41,33h26v12h-26z
-            M41,50h6v6h-6z M51,50h6v6h-6z M61,50h6v6h-6z
-            M41,60h6v6h-6z M51,60h6v6h-6z M61,60h6v6h-6z
-            M41,70h6v6h-6z M51,70h6v6h-6z M61,70h6v6h-6z" />
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        <!-- Tracks -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.16"
+            android:pathData="M35,33h38a5,5 0,0 1,0 10h-38a5,5 0,0 1,0 -10z
+                M35,49h38a5,5 0,0 1,0 10h-38a5,5 0,0 1,0 -10z
+                M35,65h38a5,5 0,0 1,0 10h-38a5,5 0,0 1,0 -10z" />
+        <!-- HP left: green, amber, red -->
+        <path
+            android:fillColor="#4ADE80"
+            android:pathData="M35,33h30a5,5 0,0 1,0 10h-30a5,5 0,0 1,0 -10z" />
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M35,49h15a5,5 0,0 1,0 10h-15a5,5 0,0 1,0 -10z" />
+        <path
+            android:fillColor="#F87171"
+            android:pathData="M35,65h1a5,5 0,0 1,0 10h-1a5,5 0,0 1,0 -10z" />
+    </group>
 </vector>

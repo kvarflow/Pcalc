@@ -3,4 +3,6 @@
     <!-- The calculator's own theme colour and page background (rr-calc's manifest.webmanifest). -->
     <color name="calc_red">#D63031</color>
     <color name="calc_background">#EEF1F6</color>
+    <!-- The opening screen: the app icon's navy (between its gradient's two ends). -->
+    <color name="splash_background">#161E33</color>
 </resources>
