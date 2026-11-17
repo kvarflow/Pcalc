@@ -6,6 +6,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+/** The rr-calc submodule's commit and its time (seconds); "unknown", 0 if it can't be read. */
+val calcCommit: Provider<Pair<String, Long>> = providers.exec {
+    commandLine("git", "-C", rootProject.file("rr-calc").path, "log", "-1", "--format=%H %ct")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { out ->
+    val parts = out.trim().split(" ")
+    if (parts.size == 2 && parts[0].matches(Regex("[0-9a-f]{40}"))) parts[0] to parts[1].toLong() else "unknown" to 0L
+}
+
 android {
     namespace = "io.github.kvarflow.pcalc"
     compileSdk = 35
@@ -15,8 +24,13 @@ android {
         // Android 9: the first with APK signing key rotation (see README, Signing).
         minSdk = 28
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.0-beta.4"
+        versionCode = 5
+        versionName = "0.1.0-beta.5"
+
+        // The calculator packed into this APK: its rr-calc commit, and that commit's time, which
+        // orders calculator builds (CalcUpdater uses a downloaded one only if it's newer).
+        buildConfigField("String", "CALC_COMMIT", "\"${calcCommit.get().first}\"")
+        buildConfigField("long", "CALC_SERIAL", "${calcCommit.get().second}L")
     }
 
     signingConfigs {
@@ -77,11 +91,15 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.webkit:webkit:1.12.1")
     testImplementation("junit:junit:4.13.2")
+    // The real org.json for unit tests (Android's own is only a stub off the device).
+    testImplementation("org.json:json:20240303")
 }
 
 tasks.withType<Test>().configureEach {
     // RetroArchSyncTest writes the /state it read here when asked (to compare with retroarch_sync.py).
     providers.gradleProperty("syncStateOut").orNull?.let { systemProperty("syncStateOut", it) }
+    // CalcUpdaterPublishedTest checks a folder of published calculator files when given one.
+    providers.gradleProperty("calcSim").orNull?.let { systemProperty("calcSim", it) }
 }
 
 /**
@@ -123,6 +141,18 @@ val calcDist: Provider<Directory> = providers.gradleProperty("calcDist")
 
 val copyCalc = tasks.register<CopyCalc>("copyCalc") {
     dist.set(calcDist)
+}
+
+/**
+ * The calculator as Pcalc's in-app updates ship it: exactly what copyCalc packs into the APK, zipped
+ * (build/calc-bundle/calc.zip). The Calculator workflow builds it from rr-calc's newest commit.
+ */
+tasks.register<Zip>("calcBundle") {
+    from(copyCalc.flatMap { it.outputDir })
+    archiveFileName.set("calc.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("calc-bundle"))
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
 }
 
 androidComponents {

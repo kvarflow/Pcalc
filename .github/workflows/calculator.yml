@@ -1,0 +1,176 @@
+name: Calculator updates
+
+# Keeps Pcalc's calculator in step with rr-calc's master:
+#  1. publishes the newest calculator, signed, to the "calculator" release, where the app looks for it
+#     once a day (CalcUpdater) and updates itself without a new APK;
+#  2. then pins that calculator in Pcalc, raises the version (0.1.0-beta.5 -> 0.1.0-beta.5.1) and
+#     publishes an APK release with it (Build APK), so new installs start with it too.
+# It runs once a day, and by hand from Actions (Run workflow).
+
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if this calculator is already published"
+        type: boolean
+        default: false
+      apk:
+        description: "Also publish an APK release with it"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One at a time, so two runs can't publish over each other.
+concurrency: calculator
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.check.outputs.commit }}
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - name: Is there a calculator newer than the published one?
+        id: check
+        run: |
+          commit=$(git ls-remote https://github.com/kvarflow/rr-calc.git refs/heads/master | cut -f1)
+          [ -n "$commit" ] || { echo "::error::Couldn't read rr-calc's master"; exit 1; }
+          published=$(curl -sfL "https://github.com/${GITHUB_REPOSITORY}/releases/download/calculator/calc-manifest.json" | jq -r .commit || true)
+          echo "rr-calc master: $commit; published: ${published:-none}"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          if [ "$commit" != "$published" ] || [ "${{ inputs.force }}" = true ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  bundle:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      COMMIT: ${{ needs.check.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: true
+          persist-credentials: false
+      - name: The newest calculator
+        run: |
+          git -C rr-calc fetch --quiet origin "$COMMIT"
+          git -C rr-calc checkout --quiet "$COMMIT"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 18
+      - name: Build the calculator (rr-calc)
+        working-directory: rr-calc
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          (cd calc && npm ci --ignore-scripts --no-audit --no-fund && npx tsc -p .)
+          node build
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          validate-wrappers: true
+      # The same files the APK packs (copyCalc), zipped.
+      - name: Pack it
+        run: ./gradlew --no-daemon calcBundle
+
+      - name: Sign and publish it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNING_KEY: ${{ secrets.PCALC_CALC_SIGNING_KEY }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::No calculator signing key in the repository secrets (PCALC_CALC_SIGNING_KEY). See README, Calculator updates."
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/calc-key.pem"
+          # The key must be the one the app trusts (CalcUpdater.PUBLIC_KEY), or every phone would refuse it.
+          public=$(openssl ec -in "$RUNNER_TEMP/calc-key.pem" -pubout -outform DER 2>/dev/null | base64 -w0)
+          grep -qF "\"$public\"" app/src/main/java/io/github/kvarflow/pcalc/CalcUpdater.kt || {
+            echo "::error::PCALC_CALC_SIGNING_KEY isn't the key the app trusts (CalcUpdater.PUBLIC_KEY)"; rm -f "$RUNNER_TEMP/calc-key.pem"; exit 1; }
+
+          file="calc-${COMMIT::7}.zip"
+          cp app/build/calc-bundle/calc.zip "$file"
+          jq -n --arg commit "$COMMIT" --arg file "$file" --arg sha256 "$(sha256sum "$file" | cut -d' ' -f1)" \
+            --argjson serial "$(git -C rr-calc log -1 --format=%ct)" \
+            --argjson minApp "$(sed -n 's/^pcalc.calcMinApp=//p' gradle.properties)" \
+            --argjson size "$(stat -c %s "$file")" \
+            '{format: 1, commit: $commit, serial: $serial, minApp: $minApp, file: $file, size: $size, sha256: $sha256}' > calc-manifest.json
+          openssl dgst -sha256 -sign "$RUNNER_TEMP/calc-key.pem" -out calc-manifest.json.sig calc-manifest.json
+          rm -f "$RUNNER_TEMP/calc-key.pem"
+          cat calc-manifest.json
+
+          if ! gh release view calculator >/dev/null 2>&1; then
+            gh release create calculator --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Calculator updates (for the app)" \
+              --notes "The newest calculator, which Pcalc downloads by itself once a day. Not an app to install: get Pcalc from the newest Pcalc release."
+          fi
+          # The zip first, then the manifest that names it, so the manifest never points at a missing file.
+          gh release upload calculator "$file" --clobber
+          gh release upload calculator calc-manifest.json calc-manifest.json.sig --clobber
+          # Keep this zip and the one before (a phone may be part-way through downloading it).
+          gh release view calculator --json assets --jq '.assets | sort_by(.createdAt) | reverse | map(.name) | map(select(startswith("calc-") and endswith(".zip"))) | .[2:] | .[]' |
+            while read -r old; do gh release delete-asset calculator "$old" --yes; done
+
+  apk:
+    needs: [check, bundle]
+    # Daily runs always do; by hand only when "apk" is ticked.
+    if: needs.bundle.result == 'success' && (github.event_name == 'schedule' || inputs.apk)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      COMMIT: ${{ needs.check.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          submodules: true
+      - name: Pin the calculator and raise the version
+        id: bump
+        run: |
+          if [ "$(git -C rr-calc rev-parse HEAD)" = "$COMMIT" ]; then
+            echo "The app already has this calculator: no APK release needed."; exit 0
+          fi
+          git -C rr-calc fetch --quiet origin "$COMMIT"
+          git -C rr-calc checkout --quiet "$COMMIT"
+          python3 - <<'EOF'
+          import re
+          path = "app/build.gradle.kts"
+          s = open(path).read()
+          code = int(re.search(r"versionCode = (\d+)", s).group(1))
+          name = re.search(r'versionName = "([^"]+)"', s).group(1)
+          beta = re.fullmatch(r"(.*-beta\.\d+)(?:\.(\d+))?", name)
+          if beta:
+              new = f"{beta.group(1)}.{int(beta.group(2) or 0) + 1}"
+          else:
+              major, minor, patch = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name).groups()
+              new = f"{major}.{minor}.{int(patch) + 1}"
+          s = s.replace(f"versionCode = {code}", f"versionCode = {code + 1}", 1)
+          s = s.replace(f'versionName = "{name}"', f'versionName = "{new}"', 1)
+          open(path, "w").write(s)
+          print(f"{name} ({code}) -> {new} ({code + 1})")
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Calculator update: rr-calc ${COMMIT::7} (automatic)"
+          git push origin HEAD:main
+          echo "release=true" >> "$GITHUB_OUTPUT"
+      - name: Publish the APK release (Build APK)
+        if: steps.bump.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build.yml --ref main -f release=true

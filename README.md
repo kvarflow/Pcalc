@@ -1,6 +1,6 @@
 # Pcalc
 
-A Pokémon damage calculator app for Android, made for the AYN Thor's second screen. It runs entirely offline, from inside the APK.
+A Pokémon damage calculator app for Android, made for the AYN Thor's second screen. It runs entirely offline, from inside the APK, and keeps its calculator up to date by itself when there's a connection.
 
 What you get:
 * **The calculator**, with the Thor's small-screen layout, as on the website. More games are on the way: each one you pick has its own box, runs and settings.
@@ -8,6 +8,7 @@ What you get:
 * **Emulator sync built in:** the calculator follows the battle in RetroArch on the other screen, and connects by itself as soon as RetroArch answers.
 * **Backups:** your boxes, runs and settings are backed up to a folder on the device automatically.
 * **Auto-import:** the game's save is imported by itself each time the game saves.
+* **Calculator updates without reinstalling:** once a day the app downloads the newest calculator, if there is one, and offers to reload into it. Your data stays.
 * **Made for the Thor's lower screen:** it opens there by itself, the tabs sit at the bottom, in reach of your thumbs, and there's a Black theme for its OLED screens.
 
 The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc is the app around it, game-neutral by design: it pins an rr-calc commit as a git submodule (`rr-calc/`), builds it and packs the result into the APK.
@@ -17,6 +18,8 @@ The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc i
 On the Thor, open [Releases](https://github.com/kvarflow/Pcalc/releases), download `Pcalc-<version>.apk` from the newest release and open it. You'll need to allow installs from your browser or file manager.
 
 Pcalc is in **beta** (`0.1.0-beta.N`), so its releases are marked *Pre-release*. Every push also builds an APK, which you can find under the run's *Artifacts* in [Actions](https://github.com/kvarflow/Pcalc/actions).
+
+New calculator versions reach the app by themselves (see [Calculator updates](#calculator-updates)), and also come as automatic releases (`0.1.0-beta.5.1`, `.2` and so on), so a fresh install starts with the newest calculator. You only need a new APK for changes to the app itself.
 
 ### Making a release
 
@@ -80,6 +83,34 @@ How it works: the calculator asks `http://127.0.0.1:31125/state` once a second. 
 
 `RetroArchSyncTest` checks it against a fake RetroArch. Its output was also compared with the Python script's for the same memory: they're identical.
 
+## Calculator updates
+
+The calculator changes far more often than the app around it, so the app updates it by itself.
+
+* **Publishing.** The **Calculator updates** workflow runs once a day, and by hand from Actions. When rr-calc's `master` has a commit that isn't published yet, it:
+  1. builds it and packs exactly what the APK would (`./gradlew calcBundle`);
+  2. writes `calc-manifest.json`: the rr-calc commit, that commit's time (which orders calculator builds), the oldest app it works with (`pcalc.calcMinApp` in `gradle.properties`), and the zip's name, size and SHA-256;
+  3. signs the manifest with the calculator key (`PCALC_CALC_SIGNING_KEY`), and uploads the zip, manifest and signature to the `calculator` release;
+  4. then pins that commit in the app, raises the version (`0.1.0-beta.5` becomes `0.1.0-beta.5.1`) and runs **Build APK** to publish the release.
+* **In the app** (`CalcUpdater`): once a day, while the app is open and online, it reads the manifest and uses the calculator only if:
+  * the signature is the calculator key's (its public half is built into the app);
+  * it's newer than the one in use, so an old calculator can't be passed off as new;
+  * the app is new enough for it;
+  * the download is exactly the file the manifest names, and unpacks without leaving its folder.
+
+  It's unpacked into the app's private storage and served from the same address as the built-in one, so the calculator's saved data carries over. A bar offers to reload into it now; otherwise it's used the next time the app starts. If anything is wrong, or there's no connection, the app keeps what it has. A newer APK's built-in calculator replaces an older download.
+* **The rest of the app** (sync, backups, the icon) still updates by APK.
+
+Raise `pcalc.calcMinApp` when the calculator starts needing something only a newer app has; older apps keep their calculator until they're updated.
+
+#### Setting up the calculator key (once)
+
+1. Make the key: `openssl ecparam -name prime256v1 -genkey -noout -out calc-signing-key.pem`.
+2. Put its public half in `CalcUpdater.PUBLIC_KEY`: `openssl ec -in calc-signing-key.pem -pubout -outform DER | base64 -w0`.
+3. On GitHub, under **Settings › Secrets and variables › Actions**, add `PCALC_CALC_SIGNING_KEY` with the whole contents of `calc-signing-key.pem`.
+
+The workflow refuses to publish with a key whose public half isn't the one in the app. Losing the key means a new APK with a new public key; nothing else is lost.
+
 ## Build
 
 ```sh
@@ -135,7 +166,8 @@ Betas may still be published with the sideload key while the release key isn't s
 
 ### Security
 
-* **Network:** none needed. The network security config allows unencrypted traffic only to the device itself, and trusts no user-added certificate authorities.
+* **Network:** the calculator needs none. The app's own update check makes HTTPS requests to GitHub once a day; the calculator's pages still can't reach the internet. The network security config allows unencrypted traffic only to the device itself, and trusts no user-added certificate authorities.
+* **Calculator updates:** only calculators signed with the calculator key, newer than the one in use, and matching the signed size and SHA-256 are used (see [Calculator updates](#calculator-updates)).
 * **Bridge:** only the calculator's own origin can message the app (`WebMessageListener`, main frame only). It can hand over a file to save, a backup, or ask for one of the app's backups by its exact name. Message sizes are capped.
 * **Files:** the WebView can't read files (`allowFileAccess` and `allowContentAccess` are off). The `.sav` import only gets the file you pick.
 * **Emulator sync:** it only reads RetroArch's memory, never writes. A reply that isn't RetroArch's is reported, never crashes the app.
@@ -144,7 +176,7 @@ Betas may still be published with the sideload key while the release key isn't s
   * The Gradle wrapper is validated.
   * npm packages install from lockfiles with their scripts off.
   * The build downloads nothing but the toolchain and packages: the calculator, its images included, comes from the pinned rr-calc commit.
-* **Releases:** the release job is the only one with write access or the signing key. It checks the signature before publishing, and publishes the APK's sha256 alongside it.
+* **Releases:** the release job is the only one with write access or the signing key (the Calculator updates workflow has its own: write access to publish, and the calculator key). It checks the signature before publishing, and publishes the APK's sha256 alongside it.
 
 ## Licence
 
