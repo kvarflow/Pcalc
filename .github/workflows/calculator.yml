@@ -1,10 +1,9 @@
 name: Calculator updates
 
-# Keeps Pcalc's calculator in step with rr-calc's master:
-#  1. publishes the newest calculator, signed, to the "calculator" release, where the app looks for it
-#     once a day (CalcUpdater) and updates itself without a new APK;
-#  2. then pins that calculator in Pcalc, raises the version (0.1.0-beta.5 -> 0.1.0-beta.5.1) and
-#     publishes an APK release with it (Build APK), so new installs start with it too.
+# Keeps Pcalc's calculator in step with rr-calc's master: publishes the newest calculator, signed, to
+# the "calculator" release, where the app looks for it whenever it opens (CalcUpdater) and updates
+# itself without a new APK. APK releases are made by hand (Build APK) when the app itself changes;
+# they pack the calculator the rr-calc submodule pins.
 # It runs once a day, and by hand from Actions (Run workflow).
 
 on:
@@ -16,10 +15,6 @@ on:
         description: "Publish even if this calculator is already published"
         type: boolean
         default: false
-      apk:
-        description: "Also publish an APK release with it"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -124,53 +119,3 @@ jobs:
           gh release view calculator --json assets --jq '.assets | sort_by(.createdAt) | reverse | map(.name) | map(select(startswith("calc-") and endswith(".zip"))) | .[2:] | .[]' |
             while read -r old; do gh release delete-asset calculator "$old" --yes; done
 
-  apk:
-    needs: [check, bundle]
-    # Daily runs always do; by hand only when "apk" is ticked.
-    if: needs.bundle.result == 'success' && (github.event_name == 'schedule' || inputs.apk)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    env:
-      COMMIT: ${{ needs.check.outputs.commit }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: main
-          submodules: true
-      - name: Pin the calculator and raise the version
-        id: bump
-        run: |
-          if [ "$(git -C rr-calc rev-parse HEAD)" = "$COMMIT" ]; then
-            echo "The app already has this calculator: no APK release needed."; exit 0
-          fi
-          git -C rr-calc fetch --quiet origin "$COMMIT"
-          git -C rr-calc checkout --quiet "$COMMIT"
-          python3 - <<'EOF'
-          import re
-          path = "app/build.gradle.kts"
-          s = open(path).read()
-          code = int(re.search(r"versionCode = (\d+)", s).group(1))
-          name = re.search(r'versionName = "([^"]+)"', s).group(1)
-          beta = re.fullmatch(r"(.*-beta\.\d+)(?:\.(\d+))?", name)
-          if beta:
-              new = f"{beta.group(1)}.{int(beta.group(2) or 0) + 1}"
-          else:
-              major, minor, patch = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name).groups()
-              new = f"{major}.{minor}.{int(patch) + 1}"
-          s = s.replace(f"versionCode = {code}", f"versionCode = {code + 1}", 1)
-          s = s.replace(f'versionName = "{name}"', f'versionName = "{new}"', 1)
-          open(path, "w").write(s)
-          print(f"{name} ({code}) -> {new} ({code + 1})")
-          EOF
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Calculator update: rr-calc ${COMMIT::7} (automatic)"
-          git push origin HEAD:main
-          echo "release=true" >> "$GITHUB_OUTPUT"
-      - name: Publish the APK release (Build APK)
-        if: steps.bump.outputs.release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run build.yml --ref main -f release=true

@@ -8,7 +8,7 @@ What you get:
 * **Emulator sync built in:** the calculator follows the battle in RetroArch on the other screen, and connects by itself as soon as RetroArch answers.
 * **Backups:** your boxes, runs and settings are backed up to a folder on the device automatically.
 * **Auto-import:** the game's save is imported by itself each time the game saves.
-* **Calculator updates without reinstalling:** once a day the app downloads the newest calculator, if there is one, and offers to reload into it. Your data stays.
+* **Calculator updates without reinstalling:** whenever you open the app with a connection, it downloads the newest calculator, if there is one, and offers to reload into it (or Settings › Calculator updates › Check now). Your data stays.
 * **Made for the Thor's lower screen:** it opens there by itself, the tabs sit at the bottom, in reach of your thumbs, and there's a Black theme for its OLED screens.
 
 The calculator itself is [rr-calc](https://github.com/kvarflow/rr-calc). Pcalc is the app around it, game-neutral by design: it pins an rr-calc commit as a git submodule (`rr-calc/`), builds it and packs the result into the APK.
@@ -19,7 +19,7 @@ On the Thor, open [Releases](https://github.com/kvarflow/Pcalc/releases), downlo
 
 Pcalc is in **beta** (`0.1.0-beta.N`), so its releases are marked *Pre-release*. Every push also builds an APK, which you can find under the run's *Artifacts* in [Actions](https://github.com/kvarflow/Pcalc/actions).
 
-New calculator versions reach the app by themselves (see [Calculator updates](#calculator-updates)), and also come as automatic releases (`0.1.0-beta.5.1`, `.2` and so on), so a fresh install starts with the newest calculator. You only need a new APK for changes to the app itself.
+New calculator versions reach the app by themselves (see [Calculator updates](#calculator-updates)). You only need a new APK for changes to the app itself; a fresh install gets the newest calculator the first time it opens online.
 
 ### Making a release
 
@@ -90,9 +90,10 @@ The calculator changes far more often than the app around it, so the app updates
 * **Publishing.** The **Calculator updates** workflow runs once a day, and by hand from Actions. When rr-calc's `master` has a commit that isn't published yet, it:
   1. builds it and packs exactly what the APK would (`./gradlew calcBundle`);
   2. writes `calc-manifest.json`: the rr-calc commit, that commit's time (which orders calculator builds), the oldest app it works with (`pcalc.calcMinApp` in `gradle.properties`), and the zip's name, size and SHA-256;
-  3. signs the manifest with the calculator key (`PCALC_CALC_SIGNING_KEY`), and uploads the zip, manifest and signature to the `calculator` release;
-  4. then pins that commit in the app, raises the version (`0.1.0-beta.5` becomes `0.1.0-beta.5.1`) and runs **Build APK** to publish the release.
-* **In the app** (`CalcUpdater`): once a day, while the app is open and online, it reads the manifest and uses the calculator only if:
+  3. signs the manifest with the calculator key (`PCALC_CALC_SIGNING_KEY`), and uploads the zip, manifest and signature to the `calculator` release.
+
+  It makes no APK: APK releases are made by hand when the app changes, with the calculator the `rr-calc` submodule pins.
+* **In the app** (`CalcUpdater`): whenever the app opens or comes back (at most every 15 minutes), and on **Settings › Calculator updates › Check now**, it reads the manifest and uses the calculator only if:
   * the signature is the calculator key's (its public half is built into the app);
   * it's newer than the one in use, so an old calculator can't be passed off as new;
   * the app is new enough for it;
@@ -166,7 +167,7 @@ Betas may still be published with the sideload key while the release key isn't s
 
 ### Security
 
-* **Network:** the calculator needs none. The app's own update check makes HTTPS requests to GitHub once a day; the calculator's pages still can't reach the internet. The network security config allows unencrypted traffic only to the device itself, and trusts no user-added certificate authorities.
+* **Network:** the calculator needs none. The app's own update check makes HTTPS requests to GitHub when it opens (at most every 15 minutes); the calculator's pages still can't reach the internet. The network security config allows unencrypted traffic only to the device itself, and trusts no user-added certificate authorities.
 * **Calculator updates:** only calculators signed with the calculator key, newer than the one in use, and matching the signed size and SHA-256 are used (see [Calculator updates](#calculator-updates)).
 * **Bridge:** only the calculator's own origin can message the app (`WebMessageListener`, main frame only). It can hand over a file to save, a backup, or ask for one of the app's backups by its exact name. Message sizes are capped.
 * **Files:** the WebView can't read files (`allowFileAccess` and `allowContentAccess` are off). The `.sav` import only gets the file you pick.

@@ -71,6 +71,9 @@ class MainActivity : ComponentActivity() {
     private var calcReply: JavaScriptReplyProxy? = null
     private var calcReady: CalcUpdater.Version? = null
     private var calcChecking = false
+    private var calcError: String? = null
+    // The calculator the page is running: the APK's, or a downloaded one.
+    private var calcVersion = CalcUpdater.Version(BuildConfig.CALC_COMMIT, BuildConfig.CALC_SERIAL)
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
             .addPathHandler("/calc/") { path -> calcPages?.handle(path) }
@@ -169,7 +172,7 @@ class MainActivity : ComponentActivity() {
         webView.webChromeClient = FilePicker()
         installDownloadBridge()
 
-        useCalculator(calcUpdater.installed()?.second)
+        calcUpdater.installed().let { useCalculator(it?.second, it?.first) }
         // Older downloads, and any download the APK's own calculator is newer than, go.
         val keep = calcDir
         io.execute { runCatching { calcUpdater.cleanUp(keep) } }
@@ -295,27 +298,54 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    /** Serves the calculator from [dir] (a downloaded one), or from the APK when null. */
-    private fun useCalculator(dir: File?) {
+    /** Serves the calculator from [dir] (a downloaded one, [version]), or from the APK when null. */
+    private fun useCalculator(dir: File?, version: CalcUpdater.Version?) {
         calcDir = dir
+        calcVersion = version ?: CalcUpdater.Version(BuildConfig.CALC_COMMIT, BuildConfig.CALC_SERIAL)
         calcPages = if (dir != null) WebViewAssetLoader.InternalStoragePathHandler(this, dir) else WebViewAssetLoader.AssetsPathHandler(this)
     }
 
-    /** At most once a day (CalcUpdater): a newer calculator, downloaded and checked off the main thread. */
-    private fun checkForCalculator() {
+    /**
+     * A newer calculator, downloaded and checked off the main thread (CalcUpdater): whenever the app
+     * opens or comes back (at most every CHECK_EVERY_MS), or straight away when asked ([force]: Settings
+     * → Calculator updates → Check now).
+     */
+    private fun checkForCalculator(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (calcChecking || calcReady != null || !calcUpdater.due(now)) return
+        if (calcChecking) return
+        if (calcReady != null || (!force && !calcUpdater.due(now))) {
+            sendCalcStatus()
+            return
+        }
         calcChecking = true
+        sendCalcStatus()
         io.execute {
             val result = calcUpdater.check(now)
             main.post {
                 calcChecking = false
+                calcError = (result as? CalcUpdater.Result.Failed)?.reason
                 if (result is CalcUpdater.Result.Updated) {
                     calcReady = result.version
                     tellPageAboutCalculator()
                 }
+                sendCalcStatus()
             }
         }
+    }
+
+    /** For Settings → Calculator updates: the calculator in use, the last check, and how it went. */
+    private fun sendCalcStatus() {
+        val reply = calcReply ?: return
+        val lastCheck = calcUpdater.lastCheck()
+        reply.postMessage(JSONObject().apply {
+            put("type", "calc:status")
+            put("commit", calcVersion.commit)
+            if (calcVersion.serial > 0) put("date", calcVersion.serial * 1000)
+            lastCheck?.let { put("lastCheck", it) }
+            put("checking", calcChecking)
+            put("ready", calcReady != null)
+            calcError?.let { put("error", it) }
+        }.toString())
     }
 
     /** The page offers to reload into the new calculator (or it's used the next time the app starts). */
@@ -454,14 +484,19 @@ class MainActivity : ComponentActivity() {
                     }
                     "calc:hello" -> {
                         calcReply = reply
+                        sendCalcStatus()
                         tellPageAboutCalculator()
+                    }
+                    "calc:check" -> {
+                        calcReply = reply
+                        checkForCalculator(force = true)
                     }
                     "calc:apply" -> {
                         // Reloads into the downloaded calculator; the saved data stays, it's the same address.
                         val ready = calcUpdater.installed()
                         if (ready != null && ready.second != calcDir) {
                             calcReady = null
-                            useCalculator(ready.second)
+                            useCalculator(ready.second, ready.first)
                             webView.reload()
                         }
                     }

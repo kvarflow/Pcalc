@@ -17,8 +17,8 @@ import java.util.zip.ZipInputStream
 /**
  * Keeps the calculator up to date without a new APK.
  *
- * The APK carries a copy of the calculator (rr-calc) from when it was built. Once a day, while the app
- * is open and there is a connection, this asks Pcalc's "calculator" release on GitHub for the newest
+ * The APK carries a copy of the calculator (rr-calc) from when it was built. Whenever the app opens
+ * (at most every CHECK_EVERY_MS) and when asked (Check now), with a connection, this asks Pcalc's "calculator" release on GitHub for the newest
  * one (the Calculator workflow publishes it whenever rr-calc changes). A new calculator is used only
  * if:
  *  - its manifest is signed with Pcalc's calculator key (the public half is [PUBLIC_KEY]; the private
@@ -81,7 +81,7 @@ class CalcUpdater(
     /** When it last heard from GitHub (ms), or null if never. */
     fun lastCheck(): Long? = readState().getProperty("lastCheck")?.toLongOrNull()
 
-    /** Time to ask again: never asked, a day since, or the clock went back. */
+    /** Time to ask again: never asked, CHECK_EVERY_MS since, or the clock went back. */
     fun due(now: Long): Boolean = lastCheck()?.let { now - it !in 0 until CHECK_EVERY_MS } ?: true
 
     /**
@@ -219,7 +219,8 @@ class CalcUpdater(
             "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEeXUHhBs9Hl11+38TKI0BpoFkPawdyp9+9o5DrQuXJF4bygMxMe9OsiJeuMzs3kftbF1dryAgwfUVjElTSQWN1w=="
         const val BASE_URL = "https://github.com/kvarflow/Pcalc/releases/download/calculator"
         const val MANIFEST = "calc-manifest.json"
-        const val CHECK_EVERY_MS = 20 * 60 * 60 * 1000L
+        // Whenever the app opens or comes back, but not more often than this.
+        const val CHECK_EVERY_MS = 15 * 60 * 1000L
 
         private const val REFUSED = "Not used:"
         private const val MAX_MANIFEST = 16 * 1024L
