@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Only for emulator sync, which talks to RetroArch on this device (127.0.0.1). The calculator
-         and its images are inside the APK and need no connection. -->
+    <!-- For emulator sync, which talks to RetroArch on this device (127.0.0.1), and the daily check
+         for a newer calculator (CalcUpdater, on GitHub). The calculator and its images are inside
+         the APK and need no connection. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application

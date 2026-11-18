@@ -42,6 +42,7 @@ import androidx.webkit.WebViewFeature
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.util.concurrent.Executors
 
 /**
@@ -49,16 +50,30 @@ import java.util.concurrent.Executors
  *
  * The pages are served from https://appassets.androidplatform.net/calc/ (WebViewAssetLoader), a
  * secure origin of their own, so the calculator's saved box, settings and runs persist like they
- * do in a browser, and nothing is fetched from the internet to run it.
+ * do in a browser, and nothing is fetched from the internet to run it. A newer calculator, once
+ * CalcUpdater has downloaded and checked one, is served from the same address instead.
  */
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
     // The opening screen stays up until the calculator has loaded (or STARTUP_LIMIT_MS has passed).
     private var calcLoaded = false
+    private val calcUpdater by lazy {
+        CalcUpdater(
+            File(filesDir, "calc"),
+            BuildConfig.VERSION_CODE,
+            CalcUpdater.Version(BuildConfig.CALC_COMMIT, BuildConfig.CALC_SERIAL),
+        )
+    }
+    // Where the calculator's pages come from: the APK, or a downloaded newer calculator.
+    @Volatile private var calcPages: WebViewAssetLoader.PathHandler? = null
+    private var calcDir: File? = null
+    private var calcReply: JavaScriptReplyProxy? = null
+    private var calcReady: CalcUpdater.Version? = null
+    private var calcChecking = false
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
-            .addPathHandler("/calc/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/calc/") { path -> calcPages?.handle(path) }
             .build()
     }
 
@@ -154,6 +169,11 @@ class MainActivity : ComponentActivity() {
         webView.webChromeClient = FilePicker()
         installDownloadBridge()
 
+        useCalculator(calcUpdater.installed()?.second)
+        // Older downloads, and any download the APK's own calculator is newer than, go.
+        val keep = calcDir
+        io.execute { runCatching { calcUpdater.cleanUp(keep) } }
+
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(START_URL)
         } else {
@@ -247,6 +267,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
+        checkForCalculator()
         main.removeCallbacks(periodicBackup)
         main.postDelayed(periodicBackup, AUTO_BACKUP_EVERY_MS)
         main.removeCallbacks(saveCheck)
@@ -272,6 +293,39 @@ class MainActivity : ComponentActivity() {
         webView.destroy()
         io.shutdown()
         super.onDestroy()
+    }
+
+    /** Serves the calculator from [dir] (a downloaded one), or from the APK when null. */
+    private fun useCalculator(dir: File?) {
+        calcDir = dir
+        calcPages = if (dir != null) WebViewAssetLoader.InternalStoragePathHandler(this, dir) else WebViewAssetLoader.AssetsPathHandler(this)
+    }
+
+    /** At most once a day (CalcUpdater): a newer calculator, downloaded and checked off the main thread. */
+    private fun checkForCalculator() {
+        val now = System.currentTimeMillis()
+        if (calcChecking || calcReady != null || !calcUpdater.due(now)) return
+        calcChecking = true
+        io.execute {
+            val result = calcUpdater.check(now)
+            main.post {
+                calcChecking = false
+                if (result is CalcUpdater.Result.Updated) {
+                    calcReady = result.version
+                    tellPageAboutCalculator()
+                }
+            }
+        }
+    }
+
+    /** The page offers to reload into the new calculator (or it's used the next time the app starts). */
+    private fun tellPageAboutCalculator() {
+        val version = calcReady ?: return
+        calcReply?.postMessage(JSONObject().apply {
+            put("type", "calc:updated")
+            put("commit", version.commit)
+            put("date", version.serial * 1000)
+        }.toString())
     }
 
     /** An automatic backup of everything the calculator keeps, unless nothing changed since the last. */
@@ -396,6 +450,19 @@ class MainActivity : ComponentActivity() {
                                     result.onFailure { put("error", it.message ?: it.javaClass.simpleName) }
                                 }.toString())
                             }
+                        }
+                    }
+                    "calc:hello" -> {
+                        calcReply = reply
+                        tellPageAboutCalculator()
+                    }
+                    "calc:apply" -> {
+                        // Reloads into the downloaded calculator; the saved data stays, it's the same address.
+                        val ready = calcUpdater.installed()
+                        if (ready != null && ready.second != calcDir) {
+                            calcReady = null
+                            useCalculator(ready.second)
+                            webView.reload()
                         }
                     }
                     "save:hello" -> {

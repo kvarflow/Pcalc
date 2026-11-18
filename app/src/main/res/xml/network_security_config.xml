@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The app needs no network: the calculator is in the APK. Unencrypted traffic is allowed only to
-     this device itself (emulator sync talks to RetroArch on 127.0.0.1); no user-added certificate
-     authorities are trusted. -->
+<!-- The calculator is in the APK and needs no network; the app only asks GitHub (over HTTPS) for
+     a newer one. Unencrypted traffic is allowed only to this device itself (emulator sync talks to
+     RetroArch on 127.0.0.1); no user-added certificate authorities are trusted. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
