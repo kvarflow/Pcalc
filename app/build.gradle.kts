@@ -24,8 +24,8 @@ android {
         // Android 9: the first with APK signing key rotation (see README, Signing).
         minSdk = 28
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.1.0-beta.5"
+        versionCode = 6
+        versionName = "0.1.0-beta.5.1"
 
         // The calculator packed into this APK: its rr-calc commit, and that commit's time, which
         // orders calculator builds (CalcUpdater uses a downloaded one only if it's newer).
