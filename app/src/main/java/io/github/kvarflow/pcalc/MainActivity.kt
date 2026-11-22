@@ -16,6 +16,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Display
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.animation.PathInterpolator
 import android.util.Base64
@@ -186,7 +188,7 @@ class MainActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Back (or a gamepad's B, which Android turns into Back) steps back a page; it never
+                // Back (the system's Back; a controller's B is ignored, see ControllerInput) steps back a page; it never
                 // closes the calculator, which would lose what is on screen.
                 if (webView.canGoBack()) webView.goBack() else moveTaskToBack(true)
             }
@@ -256,6 +258,13 @@ class MainActivity : ComponentActivity() {
             start()
         }
     }
+
+    // The controller is the game's: its buttons and sticks never reach the calculator (ControllerInput).
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        ControllerInput.isControllerKey(event.keyCode, event.source) || super.dispatchKeyEvent(event)
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
+        ControllerInput.isControllerMotion(event.source) || super.dispatchGenericMotionEvent(event)
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
