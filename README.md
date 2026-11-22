@@ -43,7 +43,6 @@ The workflow builds the APK, creates the `v<versionName>` tag and publishes the 
   * It opens on the smaller screen (the Thor's bottom one), even when started from the top screen's launcher. On a device with one screen, or with a bigger monitor plugged in, it stays where it opens.
   * Its opening screen shows the icon's three HP bars filling in, on navy, until the calculator has loaded, then fades to it.
   * Moving it between the two screens or rotating doesn't reload it.
-  * The controller is the game's: its buttons and sticks never change anything in the calculator, even after you've touched it (Android then sends the controller to Pcalc, and a D-pad press would change whatever it had focused). Tap the game's screen to give RetroArch the controller back.
   * Back, including the B button, goes back a page but never closes the calculator.
 * **Identification:** the user agent ends in `Pcalc/<version>`, so the calculator can tell it's in the app.
 
